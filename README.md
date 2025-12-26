@@ -5,62 +5,44 @@ an stb C lib to extract archives
 
 All tests are located in the `test/` directory.
 
-### Quick Start
+### Quick Start (Recommended)
 
-**Using Make (recommended):**
+**Using Make:**
 ```bash
-make test          # Run all tests
-make test-extract  # Run extraction test only
-make test-create   # Run creation test only
-make test-compat   # Run compatibility test only
-make clean         # Clean build artifacts
+make              # Build test programs
+make test         # Build and run all tests
+make test-extract # Build and run extraction test only
+make test-create  # Build and run creation test only
+make test-compat  # Build and run compatibility test only
+make clean        # Clean build artifacts
+make help         # Show all available targets
 ```
 
-**Using test scripts directly:**
+**Using build scripts (wrappers around make):**
+```bash
+./build.sh        # Linux/Unix - builds test programs
+build.bat         # Windows - builds test programs
+```
+
+### Running Tests Directly
+
+If you prefer to run test scripts directly:
 ```bash
 cd test
 chmod +x *.sh
-./run_all_tests.sh
+./run_all_tests.sh        # Run all tests
+./test_extract.sh         # Extraction test only
+./test_create.sh          # Creation test only
+./test_tar_compat.sh      # Compatibility test only
 ```
 
-### Individual Tests
+### Manual Compilation
 
-**TAR Extraction Test:**
-```bash
-cd test
-./test_extract.sh
-```
-
-**TAR Creation Test:**
-```bash
-cd test
-./test_create.sh
-```
-
-**TAR Compatibility Test:**
-```bash
-cd test
-./test_tar_compat.sh
-```
-
-### Building Test Programs Manually
-
-**Linux/Unix:**
+If you don't have `make`:
 ```bash
 cd test
 gcc test.c -o test -std=c99 -Wall -I..
-```
-
-**Windows:**
-```cmd
-cd test
-gcc test.c -o test.exe -std=c99 -Wall -I..
-```
-
-Or use the build scripts from the repository root:
-```bash
-./build.sh      # Linux/Unix
-build.bat       # Windows
+gcc test_create.c -o test_create -std=c99 -Wall -I..
 ```
 
 # What is stb_unpack.h
