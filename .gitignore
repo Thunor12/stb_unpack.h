@@ -53,3 +53,14 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Test outputs
+test/*.tar
+test/test
+test/test_create
+test/test.exe
+test/out/
+test/tar_extracted/
+test/our_*.tar
+test/tar_*.tar
+test/test_reference.tar

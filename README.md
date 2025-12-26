@@ -1,38 +1,67 @@
 # stb_unpack.h
 an stb C lib to extract archives
 
-## Building the test
+## Building and Running Tests
 
-### Windows
-Run the build script:
-```cmd
-build.bat
-```
+All tests are located in the `test/` directory.
 
-Or manually compile with:
-```cmd
-gcc test.c -o test.exe -std=c99
-```
+### Quick Start
 
-### Linux/Unix
-Run the build script:
+**Using Make (recommended):**
 ```bash
-chmod +x build.sh
-./build.sh
+make test          # Run all tests
+make test-extract  # Run extraction test only
+make test-create   # Run creation test only
+make test-compat   # Run compatibility test only
+make clean         # Clean build artifacts
 ```
 
-Or manually compile with:
+**Using test scripts directly:**
 ```bash
-gcc test.c -o test -std=c99
+cd test
+chmod +x *.sh
+./run_all_tests.sh
 ```
 
-## Running the test
+### Individual Tests
 
-Make sure you have an `archive.tar` file in the current directory, then run:
-- Windows: `test.exe`
-- Linux: `./test`
+**TAR Extraction Test:**
+```bash
+cd test
+./test_extract.sh
+```
 
-The test will extract the archive to the `out` directory.
+**TAR Creation Test:**
+```bash
+cd test
+./test_create.sh
+```
+
+**TAR Compatibility Test:**
+```bash
+cd test
+./test_tar_compat.sh
+```
+
+### Building Test Programs Manually
+
+**Linux/Unix:**
+```bash
+cd test
+gcc test.c -o test -std=c99 -Wall -I..
+```
+
+**Windows:**
+```cmd
+cd test
+gcc test.c -o test.exe -std=c99 -Wall -I..
+```
+
+Or use the build scripts from the repository root:
+```bash
+./build.sh      # Linux/Unix
+build.bat       # Windows
+```
 
 # What is stb_unpack.h
 
@@ -54,9 +83,10 @@ The goal is not to be a full-featured archive tool, but a **reliable, minimal bu
 🚧 **Work in progress**
 
 Current implementation includes:
-- Arena allocator
-- Portable filesystem abstraction
-- Streaming TAR parser
+- ✅ Arena allocator
+- ✅ Portable filesystem abstraction
+- ✅ Streaming TAR parser/extractor
+- ✅ TAR archive creator
 
 Planned features are outlined below.
 
@@ -104,9 +134,9 @@ Many small C projects need to:
 When finished, **stb_unpack.h** will support:
 
 ### Archive formats
-- ✅ `.tar`
-- ✅ `.tar.gz`
-- ✅ `.zip` (non-encrypted)
+- ✅ `.tar` (extract & create)
+- ⏳ `.tar.gz` (planned)
+- ⏳ `.zip` (planned, non-encrypted)
 
 ### Extraction
 - ✅ Extract archives **to disk**
