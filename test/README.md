@@ -6,6 +6,7 @@ This directory contains all test files and test-related scripts for `stb_unpack.
 
 - `test.c` - Basic extraction test program
 - `test_create.c` - TAR creation test program
+- `test_targz.c` - .tar.gz extraction and creation test program
 - `test_input.txt` - Small test file for basic tests
 - `test_file.txt` - Larger test file (10MB)
 - `test_compat_input.txt` - Test file for compatibility tests
@@ -15,6 +16,8 @@ This directory contains all test files and test-related scripts for `stb_unpack.
 - `test_extract.sh` - Tests TAR extraction functionality
 - `test_create.sh` - Tests TAR creation and compares with `tar` command
 - `test_tar_compat.sh` - Tests that our TAR archives can be extracted by standard `tar` tool
+- `test_targz.sh` - Tests .tar.gz extraction and creation
+- `test_targz_compat.sh` - Tests that our .tar.gz archives can be extracted by standard `tar` tool
 - `run_all_tests.sh` - Runs all tests and provides a summary
 
 ## Running Tests
@@ -25,6 +28,8 @@ make test          # Run all tests
 make test-extract  # Run extraction test only
 make test-create   # Run creation test only
 make test-compat   # Run compatibility test only
+make test-targz     # Run .tar.gz test only
+make test-targz-compat # Run .tar.gz compatibility test only
 ```
 
 **From test directory:**
@@ -39,6 +44,8 @@ cd test
 ./test_extract.sh
 ./test_create.sh
 ./test_tar_compat.sh
+./test_targz.sh
+./test_targz_compat.sh
 ```
 
 ## Test Outputs

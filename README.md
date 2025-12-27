@@ -69,6 +69,8 @@ Current implementation includes:
 - ✅ Portable filesystem abstraction
 - ✅ Streaming TAR parser/extractor
 - ✅ TAR archive creator
+- ✅ GZIP compression/decompression (requires zlib)
+- ✅ .tar.gz archive support (extract & create)
 
 Planned features are outlined below.
 
@@ -117,7 +119,7 @@ When finished, **stb_unpack.h** will support:
 
 ### Archive formats
 - ✅ `.tar` (extract & create)
-- ⏳ `.tar.gz` (planned)
+- ✅ `.tar.gz` (extract & create, requires zlib)
 - ⏳ `.zip` (planned, non-encrypted)
 
 ### Extraction

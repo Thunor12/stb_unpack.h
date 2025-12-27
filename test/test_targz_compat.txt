@@ -1,0 +1,3 @@
+Compatibility test for .tar.gz
+This archive should be readable by standard tools.
+Testing gzip compression compatibility.

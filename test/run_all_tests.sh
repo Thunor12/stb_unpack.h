@@ -46,6 +46,20 @@ echo ""
 run_test "TAR Compatibility Test" "./test_tar_compat.sh"
 echo ""
 
+# Check if zlib is available for .tar.gz tests
+if command -v gcc &> /dev/null && gcc -lz -x c - -o /dev/null 2>/dev/null <<< "int main(){return 0;}"; then
+    run_test ".tar.gz Test" "./test_targz.sh"
+    echo ""
+    
+    run_test ".tar.gz Compatibility Test" "./test_targz_compat.sh"
+    echo ""
+else
+    echo "----------------------------------------"
+    echo "Skipping .tar.gz tests (zlib not available)"
+    echo "----------------------------------------"
+    echo ""
+fi
+
 # Summary
 echo "=========================================="
 echo "Test Summary"

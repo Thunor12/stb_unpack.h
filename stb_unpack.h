@@ -123,6 +123,13 @@ static int stbup_mkdir(const char *path) {
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <io.h>
+#define unlink _unlink
+#else
+#include <unistd.h>
+#endif
+
 /* mkdir -p */
 static int stbup_mkdirs(const char *path) {
   char tmp[STBUP_PATH_MAX];
@@ -504,5 +511,413 @@ static int stbup_tar_create_file(const char *archive_path, const char *file_path
   fclose(out);
   return 1;
 }
+
+/* ============================================================
+   GZIP support (using embedded deflate/inflate)
+   ============================================================ */
+
+#ifndef STBUP_USE_MINIZ
+#define STBUP_USE_MINIZ 1
+#endif
+
+#if STBUP_USE_MINIZ
+/* Use zlib for deflate/inflate - TODO: embed miniz for true dependency-free */
+#ifdef STBUP_NO_ZLIB
+#define STBUP_HAS_ZLIB 0
+#else
+#ifdef _WIN32
+#pragma comment(lib, "zlib")
+#endif
+#ifdef __has_include
+  #if __has_include(<zlib.h>)
+    #include <zlib.h>
+    #define STBUP_HAS_ZLIB 1
+  #else
+    #define STBUP_HAS_ZLIB 0
+  #endif
+#else
+  /* Try to include zlib - if not available, gzip functions will fail gracefully */
+  #ifdef STBUP_FORCE_ZLIB
+    #include <zlib.h>
+    #define STBUP_HAS_ZLIB 1
+  #else
+    #define STBUP_HAS_ZLIB 0
+  #endif
+#endif
+#endif
+#endif
+
+/* Gzip header structure */
+typedef struct {
+  unsigned char id1;      /* 0x1f */
+  unsigned char id2;      /* 0x8b */
+  unsigned char method;   /* 8 = deflate */
+  unsigned char flags;
+  unsigned char mtime[4];
+  unsigned char xfl;
+  unsigned char os;
+} stbup_gzip_header;
+
+#if STBUP_HAS_ZLIB
+/* Decompress gzip data */
+static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
+                                  void **decompressed, size_t *decompressed_size) {
+  const unsigned char *p = (const unsigned char *)compressed;
+  
+  /* Check gzip magic */
+  if (compressed_size < 10 || p[0] != 0x1f || p[1] != 0x8b) {
+    return 0; /* Not a gzip file */
+  }
+  
+  /* Skip gzip header (10 bytes minimum) */
+  size_t header_size = 10;
+  if (p[3] & 0x04) { /* FEXTRA */
+    if (compressed_size < header_size + 2)
+      return 0;
+    unsigned short xlen = p[10] | (p[11] << 8);
+    header_size += 2 + xlen;
+  }
+  if (p[3] & 0x08) { /* FNAME */
+    while (header_size < compressed_size && p[header_size] != 0)
+      header_size++;
+    header_size++; /* null terminator */
+  }
+  if (p[3] & 0x10) { /* FCOMMENT */
+    while (header_size < compressed_size && p[header_size] != 0)
+      header_size++;
+    header_size++; /* null terminator */
+  }
+  if (p[3] & 0x02) { /* FHCRC */
+    header_size += 2;
+  }
+  
+  if (header_size >= compressed_size - 8)
+    return 0; /* No room for deflate data and footer */
+  
+  /* Get deflate data (skip header, before 8-byte footer) */
+  const unsigned char *deflate_data = p + header_size;
+  size_t deflate_size = compressed_size - header_size - 8;
+  
+  /* Use zlib for decompression (gzip format uses zlib-wrapped deflate) */
+  z_stream strm;
+  memset(&strm, 0, sizeof(strm));
+  
+  /* Use inflateInit2 with windowBits = -MAX_WBITS for raw deflate (gzip header already parsed) */
+  if (inflateInit2(&strm, -MAX_WBITS) != Z_OK)
+    return 0;
+  
+  strm.next_in = (Bytef *)deflate_data;
+  strm.avail_in = (uInt)deflate_size;
+  
+  /* Allocate output buffer (start with 4x estimate) */
+  uLongf dest_len = deflate_size * 4;
+  void *dest = malloc(dest_len);
+  if (!dest) {
+    inflateEnd(&strm);
+    return 0;
+  }
+  
+  strm.next_out = (Bytef *)dest;
+  strm.avail_out = dest_len;
+  
+  int ret;
+  do {
+    ret = inflate(&strm, Z_FINISH);
+    if (ret == Z_STREAM_END)
+      break;
+    if (ret != Z_OK && ret != Z_BUF_ERROR) {
+      free(dest);
+      inflateEnd(&strm);
+      return 0;
+    }
+    /* If buffer is full, expand it */
+    if (strm.avail_out == 0) {
+      uLongf old_len = dest_len;
+      dest_len *= 2;
+      void *new_dest = realloc(dest, dest_len);
+      if (!new_dest) {
+        free(dest);
+        inflateEnd(&strm);
+        return 0;
+      }
+      dest = new_dest;
+      strm.next_out = (Bytef *)dest + old_len;
+      strm.avail_out = dest_len - old_len;
+    }
+  } while (ret != Z_STREAM_END);
+  
+  dest_len = strm.total_out;
+  
+  /* Resize to actual size */
+  if (dest_len > 0) {
+    void *new_dest = realloc(dest, dest_len);
+    if (new_dest)
+      dest = new_dest;
+  }
+  
+  inflateEnd(&strm);
+  
+  *decompressed = dest;
+  *decompressed_size = dest_len;
+  return 1;
+}
+
+/* Compress data to gzip format */
+static int stbup_gzip_compress(const void *data, size_t data_size,
+                                void **compressed, size_t *compressed_size) {
+  /* Allocate buffer: header (10) + compressed data (estimate) + footer (8) */
+  uLongf compressed_bound = compressBound((uLong)data_size);
+  size_t total_size = 10 + compressed_bound + 8;
+  void *dest = malloc(total_size);
+  if (!dest)
+    return 0;
+  
+  unsigned char *p = (unsigned char *)dest;
+  
+  /* Write gzip header */
+  p[0] = 0x1f;  /* id1 */
+  p[1] = 0x8b;  /* id2 */
+  p[2] = 8;     /* method = deflate */
+  p[3] = 0;     /* flags */
+  p[4] = p[5] = p[6] = p[7] = 0; /* mtime = 0 */
+  p[8] = 0;     /* xfl */
+  p[9] = 3;     /* os = Unix (3) - more compatible than 255 */
+  
+  /* Compress data using deflate (for gzip format) */
+  z_stream strm;
+  memset(&strm, 0, sizeof(strm));
+  strm.zalloc = Z_NULL;
+  strm.zfree = Z_NULL;
+  strm.opaque = Z_NULL;
+  
+  /* Use deflateInit2 with windowBits = -MAX_WBITS for raw deflate (we write gzip header manually) */
+  /* Note: Negative windowBits means raw deflate (no zlib header), we write gzip header ourselves */
+  if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+    free(dest);
+    return 0;
+  }
+  
+  strm.next_in = (Bytef *)data;
+  strm.avail_in = (uInt)data_size;
+  strm.next_out = (Bytef *)(p + 10);
+  strm.avail_out = compressed_bound;
+  
+  int ret = deflate(&strm, Z_FINISH);
+  if (ret != Z_STREAM_END) {
+    free(dest);
+    deflateEnd(&strm);
+    return 0;
+  }
+  
+  uLongf compressed_len = strm.total_out;
+  deflateEnd(&strm);
+  
+  /* Write gzip footer (CRC32 and size) */
+  unsigned long crc = crc32(0L, Z_NULL, 0);
+  crc = crc32(crc, (const Bytef *)data, (uInt)data_size);
+  
+  size_t footer_pos = 10 + compressed_len;
+  p[footer_pos + 0] = (unsigned char)(crc & 0xff);
+  p[footer_pos + 1] = (unsigned char)((crc >> 8) & 0xff);
+  p[footer_pos + 2] = (unsigned char)((crc >> 16) & 0xff);
+  p[footer_pos + 3] = (unsigned char)((crc >> 24) & 0xff);
+  
+  unsigned long isize = (unsigned long)data_size;
+  p[footer_pos + 4] = (unsigned char)(isize & 0xff);
+  p[footer_pos + 5] = (unsigned char)((isize >> 8) & 0xff);
+  p[footer_pos + 6] = (unsigned char)((isize >> 16) & 0xff);
+  p[footer_pos + 7] = (unsigned char)((isize >> 24) & 0xff);
+  
+  /* Resize to actual size */
+  void *final = realloc(dest, footer_pos + 8);
+  if (final)
+    dest = final;
+  
+  *compressed = dest;
+  *compressed_size = footer_pos + 8;
+  return 1;
+}
+#else
+/* Stub functions when zlib is not available */
+static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
+                                  void **decompressed, size_t *decompressed_size) {
+  (void)compressed;
+  (void)compressed_size;
+  (void)decompressed;
+  (void)decompressed_size;
+  return 0;
+}
+
+static int stbup_gzip_compress(const void *data, size_t data_size,
+                                void **compressed, size_t *compressed_size) {
+  (void)data;
+  (void)data_size;
+  (void)compressed;
+  (void)compressed_size;
+  return 0;
+}
+#endif
+
+#if STBUP_HAS_ZLIB
+/* Extract .tar.gz archive */
+static int stbup_targz_extract(const char *archive_path, const char *out_dir) {
+  void *compressed_data = NULL;
+  size_t compressed_size = 0;
+  if (!stbup_read_file(archive_path, &compressed_data, &compressed_size))
+    return 0;
+  
+  void *tar_data = NULL;
+  size_t tar_size = 0;
+  if (!stbup_gzip_decompress(compressed_data, compressed_size, &tar_data, &tar_size)) {
+    free(compressed_data);
+    return 0;
+  }
+  
+  int ret = stbup_tar_extract_stream(tar_data, tar_size, out_dir);
+  free(compressed_data);
+  free(tar_data);
+  return ret;
+}
+
+/* Create .tar.gz archive from a file */
+static int stbup_targz_create_file(const char *archive_path, const char *file_path) {
+  /* First create a temporary .tar file in memory instead of on disk */
+  /* We'll create the TAR in memory, then compress it */
+  
+  void *file_data = NULL;
+  size_t file_size = 0;
+  if (!stbup_read_file(file_path, &file_data, &file_size))
+    return 0;
+  
+  /* Extract filename from path */
+  const char *filename = file_path;
+  const char *last_slash = strrchr(file_path, '/');
+  const char *last_backslash = strrchr(file_path, '\\');
+  if (last_slash || last_backslash) {
+    const char *last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+    filename = last_sep + 1;
+  }
+  
+  size_t name_len = strlen(filename);
+  if (name_len > 100)
+    name_len = 100;
+  
+  /* Calculate TAR size: header (512) + data (padded to 512) + 2 zero blocks (1024) */
+  size_t tar_data_size = 512 + ((file_size + 511) & ~511) + 1024;
+  void *tar_data = malloc(tar_data_size);
+  if (!tar_data) {
+    free(file_data);
+    return 0;
+  }
+  
+  unsigned char *p = (unsigned char *)tar_data;
+  memset(p, 0, tar_data_size);
+  
+  /* Create TAR header (same as stbup_tar_create_file) */
+  stbup_tar_header *h = (stbup_tar_header *)p;
+  memcpy(h->name, filename, name_len);
+  
+  /* Get file stats */
+  uint64_t mode = 0644;
+  uint64_t uid = 0;
+  uint64_t gid = 0;
+  uint64_t mtime = 0;
+  
+#ifdef _WIN32
+  struct _stat st;
+  if (_stat(file_path, &st) == 0) {
+    mode = (st.st_mode & 0777) | 0100000;
+    mtime = (uint64_t)st.st_mtime;
+  }
+#else
+  struct stat st;
+  if (stat(file_path, &st) == 0) {
+    mode = st.st_mode & 0777;
+    uid = st.st_uid;
+    gid = st.st_gid;
+    mtime = (uint64_t)st.st_mtime;
+  }
+#endif
+  
+  stbup_u64_to_octal(h->mode, sizeof(h->mode), mode);
+  stbup_u64_to_octal(h->uid, sizeof(h->uid), uid);
+  stbup_u64_to_octal(h->gid, sizeof(h->gid), gid);
+  stbup_u64_to_octal(h->size, sizeof(h->size), file_size);
+  stbup_u64_to_octal(h->mtime, sizeof(h->mtime), mtime);
+  h->typeflag = '0';
+  memcpy(h->magic, "ustar", 5);
+  h->magic[5] = ' ';
+  h->version[0] = ' ';
+  h->version[1] = 0;
+  
+#ifndef _WIN32
+  struct passwd *pw = getpwuid(uid);
+  if (pw) {
+    size_t uname_len = strlen(pw->pw_name);
+    if (uname_len > 31) uname_len = 31;
+    memcpy(h->uname, pw->pw_name, uname_len);
+  }
+  struct group *gr = getgrgid(gid);
+  if (gr) {
+    size_t gname_len = strlen(gr->gr_name);
+    if (gname_len > 31) gname_len = 31;
+    memcpy(h->gname, gr->gr_name, gname_len);
+  }
+#endif
+  
+  /* Calculate and write checksum */
+  unsigned int checksum = stbup_tar_checksum(h);
+  char chksum_str[8];
+  snprintf(chksum_str, sizeof(chksum_str), "%06o", checksum);
+  memcpy(h->chksum, chksum_str, 6);
+  h->chksum[6] = 0;
+  h->chksum[7] = ' ';
+  
+  /* Write file data */
+  memcpy(p + 512, file_data, file_size);
+  
+  /* Calculate actual TAR size (up to end of data + padding + 2 zero blocks) */
+  size_t actual_tar_size = 512 + ((file_size + 511) & ~511) + 1024;
+  
+  /* Compress TAR data to gzip */
+  void *compressed_data = NULL;
+  size_t compressed_size = 0;
+  if (!stbup_gzip_compress(tar_data, actual_tar_size, &compressed_data, &compressed_size)) {
+    free(tar_data);
+    free(file_data);
+    return 0;
+  }
+  
+  /* Write compressed data */
+  FILE *out = fopen(archive_path, "wb");
+  if (!out) {
+    free(tar_data);
+    free(file_data);
+    free(compressed_data);
+    return 0;
+  }
+  
+  int ret = (fwrite(compressed_data, 1, compressed_size, out) == compressed_size);
+  fclose(out);
+  
+  free(tar_data);
+  free(file_data);
+  free(compressed_data);
+  return ret;
+}
+#else
+/* Stub functions when zlib is not available */
+static int stbup_targz_extract(const char *archive_path, const char *out_dir) {
+  (void)archive_path;
+  (void)out_dir;
+  return 0;
+}
+
+static int stbup_targz_create_file(const char *archive_path, const char *file_path) {
+  (void)archive_path;
+  (void)file_path;
+  return 0;
+}
+#endif
 
 #endif /* STB_UNPACK_H */
