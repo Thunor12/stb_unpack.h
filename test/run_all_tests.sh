@@ -44,6 +44,7 @@ if [ -f "../miniz.c" ] && [ -f "../miniz.h" ]; then
     run_test ".tar.gz Comprehensive Test" "./test_targz_comprehensive.sh"
     run_test ".zip Test" "./test_zip.sh"
     run_test ".zip Compatibility Test" "./test_zip_compat.sh"
+    run_test ".zip Comprehensive Test" "./test_zip_comprehensive.sh"
 fi
 
 # Summary
