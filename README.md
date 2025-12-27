@@ -7,7 +7,17 @@ All tests are located in the `test/` directory.
 
 ### Quick Start (Recommended)
 
-**Using Make:**
+**Using nob.c (single-file build system):**
+```bash
+./nob              # Build test programs and run all tests (default)
+./nob build        # Build all test programs
+./nob test         # Build and run all tests
+./nob example      # Build example program
+./nob clean        # Clean build artifacts and test outputs
+./nob help         # Show help message
+```
+
+**Using Make (alternative):**
 ```bash
 make              # Build test programs
 make test         # Build and run all tests
@@ -16,12 +26,6 @@ make test-create  # Build and run creation test only
 make test-compat  # Build and run compatibility test only
 make clean        # Clean build artifacts
 make help         # Show all available targets
-```
-
-**Using build scripts (wrappers around make):**
-```bash
-./build.sh        # Linux/Unix - builds test programs
-build.bat         # Windows - builds test programs
 ```
 
 ### Running Tests Directly
