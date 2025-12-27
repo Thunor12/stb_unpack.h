@@ -25,8 +25,6 @@
  *
  **************************************************************************/
 
-
-
 typedef unsigned char mz_validate_uint16[sizeof(mz_uint16) == 2 ? 1 : -1];
 typedef unsigned char mz_validate_uint32[sizeof(mz_uint32) == 4 ? 1 : -1];
 typedef unsigned char mz_validate_uint64[sizeof(mz_uint64) == 8 ? 1 : -1];
@@ -85,11 +83,11 @@ extern "C"
         return ~crcu32;
     }
 #elif defined(USE_EXTERNAL_MZCRC)
-/* If USE_EXTERNAL_CRC is defined, an external module will export the
- * mz_crc32() symbol for us to use, e.g. an SSE-accelerated version.
- * Depending on the impl, it may be necessary to ~ the input/output crc values.
- */
-mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len);
+    /* If USE_EXTERNAL_CRC is defined, an external module will export the
+     * mz_crc32() symbol for us to use, e.g. an SSE-accelerated version.
+     * Depending on the impl, it may be necessary to ~ the input/output crc values.
+     */
+    mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len);
 #else
 /* Faster, but larger CPU cache footprint.
  */
@@ -670,8 +668,6 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
  * THE SOFTWARE.
  *
  **************************************************************************/
-
-
 
 #ifndef MINIZ_NO_DEFLATE_APIS
 
@@ -2242,33 +2238,31 @@ static MZ_FORCEINLINE void tdefl_find_match(tdefl_compressor *d, mz_uint lookahe
 #endif
 
 #endif /*#ifndef MINIZ_NO_DEFLATE_APIS*/
- /**************************************************************************
- *
- * Copyright 2013-2014 RAD Game Tools and Valve Software
- * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
- * All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *
- **************************************************************************/
-
-
+       /**************************************************************************
+        *
+        * Copyright 2013-2014 RAD Game Tools and Valve Software
+        * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+        * All Rights Reserved.
+        *
+        * Permission is hereby granted, free of charge, to any person obtaining a copy
+        * of this software and associated documentation files (the "Software"), to deal
+        * in the Software without restriction, including without limitation the rights
+        * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        * copies of the Software, and to permit persons to whom the Software is
+        * furnished to do so, subject to the following conditions:
+        *
+        * The above copyright notice and this permission notice shall be included in
+        * all copies or substantial portions of the Software.
+        *
+        * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+        * THE SOFTWARE.
+        *
+        **************************************************************************/
 
 #ifndef MINIZ_NO_INFLATE_APIS
 
@@ -3012,33 +3006,32 @@ extern "C"
 #endif
 
 #endif /*#ifndef MINIZ_NO_INFLATE_APIS*/
- /**************************************************************************
- *
- * Copyright 2013-2014 RAD Game Tools and Valve Software
- * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
- * Copyright 2016 Martin Raiber
- * All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *
- **************************************************************************/
-
+       /**************************************************************************
+        *
+        * Copyright 2013-2014 RAD Game Tools and Valve Software
+        * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+        * Copyright 2016 Martin Raiber
+        * All Rights Reserved.
+        *
+        * Permission is hereby granted, free of charge, to any person obtaining a copy
+        * of this software and associated documentation files (the "Software"), to deal
+        * in the Software without restriction, including without limitation the rights
+        * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        * copies of the Software, and to permit persons to whom the Software is
+        * furnished to do so, subject to the following conditions:
+        *
+        * The above copyright notice and this permission notice shall be included in
+        * all copies or substantial portions of the Software.
+        *
+        * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+        * THE SOFTWARE.
+        *
+        **************************************************************************/
 
 #ifndef MINIZ_NO_ARCHIVE_APIS
 
@@ -3822,7 +3815,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
         /* Update the archive start position, but only if not specified. */
         if ((pZip->m_zip_type == MZ_ZIP_TYPE_FILE || pZip->m_zip_type == MZ_ZIP_TYPE_CFILE ||
-            pZip->m_zip_type == MZ_ZIP_TYPE_USER) && pZip->m_pState->m_file_archive_start_ofs == 0)
+             pZip->m_zip_type == MZ_ZIP_TYPE_USER) &&
+            pZip->m_pState->m_file_archive_start_ofs == 0)
         {
             pZip->m_pState->m_file_archive_start_ofs = archive_ofs;
             pZip->m_archive_size -= archive_ofs;
@@ -4116,7 +4110,7 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if ((!pZip) || (!pFilename) || ((archive_size) && (archive_size < MZ_ZIP_END_OF_CENTRAL_DIR_HEADER_SIZE)))
             return mz_zip_set_error(pZip, MZ_ZIP_INVALID_PARAMETER);
 
-        pFile = MZ_FOPEN(pFilename, (flags & MZ_ZIP_FLAG_READ_ALLOW_WRITING ) ? "r+b" : "rb");
+        pFile = MZ_FOPEN(pFilename, (flags & MZ_ZIP_FLAG_READ_ALLOW_WRITING) ? "r+b" : "rb");
         if (!pFile)
             return mz_zip_set_error(pZip, MZ_ZIP_FILE_OPEN_FAILED);
 
@@ -6039,7 +6033,7 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
                 return mz_zip_set_error(pZip, MZ_ZIP_INVALID_PARAMETER);
 
             if (pZip->m_zip_type == MZ_ZIP_TYPE_FILE &&
-                !(flags & MZ_ZIP_FLAG_READ_ALLOW_WRITING) )
+                !(flags & MZ_ZIP_FLAG_READ_ALLOW_WRITING))
             {
                 if (!pFilename)
                     return mz_zip_set_error(pZip, MZ_ZIP_INVALID_PARAMETER);

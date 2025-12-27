@@ -115,8 +115,6 @@
 */
 #pragma once
 
-
-
 /* Defines to completely disable specific portions of miniz.c:
    If all macros here are defined the only functionality remaining will be CRC-32 and adler-32. */
 
@@ -557,12 +555,12 @@ extern "C"
         return mz_inflateEnd(pStream);
     }
 
-    static int uncompress(unsigned char* pDest, mz_ulong* pDest_len, const unsigned char* pSource, mz_ulong source_len)
+    static int uncompress(unsigned char *pDest, mz_ulong *pDest_len, const unsigned char *pSource, mz_ulong source_len)
     {
         return mz_uncompress(pDest, pDest_len, pSource, source_len);
     }
 
-    static int uncompress2(unsigned char* pDest, mz_ulong* pDest_len, const unsigned char* pSource, mz_ulong* pSource_len)
+    static int uncompress2(unsigned char *pDest, mz_ulong *pDest_len, const unsigned char *pSource, mz_ulong *pSource_len)
     {
         return mz_uncompress2(pDest, pDest_len, pSource, pSource_len);
     }
@@ -577,11 +575,11 @@ extern "C"
     {
         return mz_adler32(adler, ptr, buf_len);
     }
-    
+
 #define MAX_WBITS 15
 #define MAX_MEM_LEVEL 9
 
-    static const char* zError(int err)
+    static const char *zError(int err)
     {
         return mz_error(err);
     }
@@ -602,16 +600,11 @@ extern "C"
 }
 #endif
 
-
-
-
 #pragma once
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
-
 
 /* ------------------- Types and macros */
 typedef unsigned char mz_uint8;
@@ -702,8 +695,7 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
- #pragma once
-
+#pragma once
 
 #ifndef MINIZ_NO_DEFLATE_APIS
 
@@ -901,7 +893,7 @@ enum
 #endif
 
 #endif /*#ifndef MINIZ_NO_DEFLATE_APIS*/
- #pragma once
+#pragma once
 
 /* ------------------- Low-level Decompression API Definitions */
 
@@ -1051,9 +1043,8 @@ typedef mz_uint32 tinfl_bit_buf_t;
 #endif
 
 #endif /*#ifndef MINIZ_NO_INFLATE_APIS*/
- 
-#pragma once
 
+#pragma once
 
 /* ------------------- ZIP archive reading/writing */
 
