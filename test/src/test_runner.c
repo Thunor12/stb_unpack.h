@@ -27,25 +27,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-// Platform-specific includes for file access
-#ifdef _WIN32
-#include <io.h>
-#define access _access
-#define F_OK 0
-#else
-#include <unistd.h>
-#include <sys/stat.h>
-#endif
-
-/**
- * Check if a file exists
- * 
- * @param path Path to the file
- * @return true if file exists, false otherwise
- */
-static bool file_exists(const char *path) {
-    return access(path, F_OK) == 0;
-}
+// Using nob_file_exists from nob.h instead of custom implementation
 
 /**
  * Get executable path with .exe extension on Windows
@@ -124,9 +106,9 @@ static bool miniz_available(void) {
     
     // Check for external miniz
     for (int i = 0; miniz_c_paths[i]; i++) {
-        if (file_exists(miniz_c_paths[i])) {
+        if (nob_file_exists(miniz_c_paths[i])) {
             for (int j = 0; miniz_h_paths[j]; j++) {
-                if (file_exists(miniz_h_paths[j])) {
+                if (nob_file_exists(miniz_h_paths[j])) {
                     return true;
                 }
             }
@@ -187,7 +169,7 @@ static int run_test_exe(const char *exe_path_arg, const char *test_name, int arg
     size_t len = strlen(exe_path_arg);
     if (len >= 4 && strcmp(exe_path_arg + len - 4, ".exe") == 0) {
         // Already has .exe, use as-is
-        if (!file_exists(exe_path_arg)) {
+        if (!nob_file_exists(exe_path_arg)) {
             return 1;
         }
         actual_path = exe_path_arg;
@@ -195,16 +177,16 @@ static int run_test_exe(const char *exe_path_arg, const char *test_name, int arg
         // Try with .exe
         static char win_path[256];
         snprintf(win_path, sizeof(win_path), "%s.exe", exe_path_arg);
-        if (file_exists(win_path)) {
+        if (nob_file_exists(win_path)) {
             actual_path = win_path;
-        } else if (file_exists(exe_path_arg)) {
+        } else if (nob_file_exists(exe_path_arg)) {
             actual_path = exe_path_arg;
         } else {
             return 1;
         }
     }
 #else
-    if (!file_exists(exe_path_arg)) {
+    if (!nob_file_exists(exe_path_arg)) {
         return 1;
     }
 #endif
@@ -249,7 +231,7 @@ static int test_tar_extract(void) {
     nob_cmd_run(&cmd);
     nob_cmd_free(cmd);
     
-    if (!file_exists("output/archive.tar")) {
+    if (!nob_file_exists("output/archive.tar")) {
         return 1;
     }
     
@@ -287,7 +269,7 @@ static int test_tar_create(void) {
         return 1;
     }
     
-    if (!file_exists("output/our_archive.tar")) {
+    if (!nob_file_exists("output/our_archive.tar")) {
         return 1;
     }
     
@@ -305,7 +287,7 @@ static int test_tar_create(void) {
     }
     nob_cmd_free(extract_cmd);
     
-    if (!file_exists("output/our_extracted/test_input.txt")) {
+    if (!nob_file_exists("output/our_extracted/test_input.txt")) {
         return 1;
     }
     
@@ -341,7 +323,7 @@ static int test_tar_compat(void) {
         return 1;
     }
     
-    if (!file_exists("output/our_compat_archive.tar")) {
+    if (!nob_file_exists("output/our_compat_archive.tar")) {
         return 1;
     }
     
@@ -359,7 +341,7 @@ static int test_tar_compat(void) {
     }
     nob_cmd_free(extract_cmd);
     
-    if (!file_exists("output/tar_extracted/test_compat_input.txt")) {
+    if (!nob_file_exists("output/tar_extracted/test_compat_input.txt")) {
         return 1;
     }
     
@@ -393,7 +375,7 @@ static int test_targz_basic(void) {
     }
     nob_cmd_free(create_cmd);
     
-    if (!file_exists("output/test_archive.tar.gz")) {
+    if (!nob_file_exists("output/test_archive.tar.gz")) {
         return 1;
     }
     
@@ -404,7 +386,7 @@ static int test_targz_basic(void) {
         return 1;
     }
     
-    if (!file_exists("output/targz_out/test_targz_input.txt")) {
+    if (!nob_file_exists("output/targz_out/test_targz_input.txt")) {
         return 1;
     }
     
@@ -442,7 +424,7 @@ static int test_targz_compat(void) {
     }
     nob_cmd_free(create_cmd);
     
-    if (!file_exists("output/our_targz_archive.tar.gz")) {
+    if (!nob_file_exists("output/our_targz_archive.tar.gz")) {
         return 1;
     }
     
@@ -460,7 +442,7 @@ static int test_targz_compat(void) {
     }
     nob_cmd_free(extract_cmd);
     
-    if (!file_exists("output/tar_extracted_targz/test_targz_compat.txt")) {
+    if (!nob_file_exists("output/tar_extracted_targz/test_targz_compat.txt")) {
         return 1;
     }
     
@@ -494,7 +476,7 @@ static int test_zip_basic(void) {
     }
     nob_cmd_free(create_cmd);
     
-    if (!file_exists("output/test_archive.zip")) {
+    if (!nob_file_exists("output/test_archive.zip")) {
         return 1;
     }
     
@@ -505,7 +487,7 @@ static int test_zip_basic(void) {
         return 1;
     }
     
-    if (!file_exists("output/zip_out/test_zip_input.txt")) {
+    if (!nob_file_exists("output/zip_out/test_zip_input.txt")) {
         return 1;
     }
     
@@ -543,7 +525,7 @@ static int test_zip_compat(void) {
     }
     nob_cmd_free(create_cmd);
     
-    if (!file_exists("output/our_zip_archive.zip")) {
+    if (!nob_file_exists("output/our_zip_archive.zip")) {
         return 1;
     }
     
@@ -561,7 +543,7 @@ static int test_zip_compat(void) {
     }
     nob_cmd_free(extract_cmd);
     
-    if (!file_exists("output/zip_extracted/test_zip_compat.txt")) {
+    if (!nob_file_exists("output/zip_extracted/test_zip_compat.txt")) {
         return 1;
     }
     
@@ -601,7 +583,7 @@ static int test_targz_comprehensive(void) {
     }
     nob_cmd_free(create_cmd);
     
-    if (!file_exists("output/comprehensive/single.tar.gz")) {
+    if (!nob_file_exists("output/comprehensive/single.tar.gz")) {
         return 1;
     }
     
@@ -624,7 +606,7 @@ static int test_targz_comprehensive(void) {
     nob_cmd_free(extract_cmd);
     
     // Verify file
-    if (!file_exists("output/comprehensive/out/single.txt")) {
+    if (!nob_file_exists("output/comprehensive/out/single.txt")) {
         return 1;
     }
     
@@ -664,7 +646,7 @@ static int test_zip_comprehensive(void) {
     }
     nob_cmd_free(create_cmd);
     
-    if (!file_exists("output/zip_comprehensive/single.zip")) {
+    if (!nob_file_exists("output/zip_comprehensive/single.zip")) {
         return 1;
     }
     
@@ -675,7 +657,7 @@ static int test_zip_comprehensive(void) {
     }
     
     // Verify file
-    if (!file_exists("output/zip_comprehensive/out/single.txt")) {
+    if (!nob_file_exists("output/zip_comprehensive/out/single.txt")) {
         return 1;
     }
     
