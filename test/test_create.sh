@@ -3,13 +3,10 @@
 
 set -e  # Exit on error
 
-echo "=== Building TAR creation test ==="
-if command -v gcc &> /dev/null; then
-    gcc test_create.c ../miniz.c ../miniz_tdef.c ../miniz_tinfl.c -o test_create -std=c99 -Wall -I.. -DMINIZ_IMPLEMENTATION 2>&1 | grep -v "warning:.*defined but not used" || true
-elif command -v clang &> /dev/null; then
-    clang test_create.c ../miniz.c ../miniz_tdef.c ../miniz_tinfl.c -o test_create -std=c99 -Wall -I.. -DMINIZ_IMPLEMENTATION 2>&1 | grep -v "warning:.*defined but not used" || true
-else
-    echo "Error: No C compiler found"
+echo "=== Checking for test_create executable ==="
+if [ ! -f test_create ]; then
+    echo "✗ Test executable not found!"
+    echo "Please build the test programs first using: make"
     exit 1
 fi
 

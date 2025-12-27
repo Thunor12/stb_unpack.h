@@ -15,13 +15,10 @@ echo "Contents:"
 tar -tf archive.tar
 
 echo ""
-echo "=== Building test program ==="
-if command -v gcc &> /dev/null; then
-    gcc test.c ../miniz.c ../miniz_tdef.c ../miniz_tinfl.c -o test -std=c99 -Wall -I.. -DMINIZ_IMPLEMENTATION 2>&1 | grep -v "warning:.*defined but not used" || true
-elif command -v clang &> /dev/null; then
-    clang test.c ../miniz.c ../miniz_tdef.c ../miniz_tinfl.c -o test -std=c99 -Wall -I.. -DMINIZ_IMPLEMENTATION 2>&1 | grep -v "warning:.*defined but not used" || true
-else
-    echo "Error: No C compiler found"
+echo "=== Checking for test executable ==="
+if [ ! -f test ]; then
+    echo "✗ Test executable not found!"
+    echo "Please build the test programs first using: make"
     exit 1
 fi
 
