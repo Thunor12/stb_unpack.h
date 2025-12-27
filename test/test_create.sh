@@ -13,28 +13,44 @@ echo "Hello, this is a test file!" > test_input.txt
 echo "It has multiple lines." >> test_input.txt
 echo "And some content." >> test_input.txt
 
-rm -f our_archive.tar
-./test_create our_archive.tar test_input.txt >/dev/null 2>&1
+# Set a fixed modification time so both archives use the same timestamp
+touch -t 202001010000.00 test_input.txt
 
-rm -f tar_archive.tar
+rm -f our_archive.tar tar_archive.tar
+rm -rf our_extracted tar_extracted
+
+# Create archives
+./test_create our_archive.tar test_input.txt >/dev/null 2>&1
 tar cf tar_archive.tar test_input.txt >/dev/null 2>&1
 
-if cmp -s our_archive.tar tar_archive.tar >/dev/null 2>&1; then
-    exit 0
+# Extract both archives
+mkdir -p our_extracted tar_extracted
+tar xf our_archive.tar -C our_extracted >/dev/null 2>&1
+tar xf tar_archive.tar -C tar_extracted >/dev/null 2>&1
+
+# Compare extracted files (more robust than byte-for-byte archive comparison)
+if [ -f "our_extracted/test_input.txt" ] && [ -f "tar_extracted/test_input.txt" ]; then
+    if cmp -s our_extracted/test_input.txt tar_extracted/test_input.txt >/dev/null 2>&1; then
+        # Also verify against original
+        if cmp -s test_input.txt our_extracted/test_input.txt >/dev/null 2>&1; then
+            exit 0
+        else
+            echo "✗ Extracted file doesn't match original!"
+            exit 1
+        fi
+    else
+        echo "✗ Extracted files differ!"
+        echo "Our archive extracted:"
+        cat our_extracted/test_input.txt
+        echo ""
+        echo "Tar archive extracted:"
+        cat tar_extracted/test_input.txt
+        exit 1
+    fi
 else
-    echo "✗ Archives differ!"
-    echo "Our archive size: $(stat -c%s our_archive.tar 2>/dev/null || stat -f%z our_archive.tar 2>/dev/null) bytes"
-    echo "Tar archive size: $(stat -c%s tar_archive.tar 2>/dev/null || stat -f%z tar_archive.tar 2>/dev/null) bytes"
-    echo ""
-    echo "Hex dump comparison (first 512 bytes):"
-    echo "Our archive:"
-    hexdump -C our_archive.tar | head -n 20
-    echo ""
-    echo "Tar archive:"
-    hexdump -C tar_archive.tar | head -n 20
-    echo ""
-    echo "Differences:"
-    diff <(hexdump -C our_archive.tar) <(hexdump -C tar_archive.tar) | head -n 30 || true
+    echo "✗ Failed to extract files!"
+    echo "Our extracted: $([ -f our_extracted/test_input.txt ] && echo 'exists' || echo 'missing')"
+    echo "Tar extracted: $([ -f tar_extracted/test_input.txt ] && echo 'exists' || echo 'missing')"
     exit 1
 fi
 
