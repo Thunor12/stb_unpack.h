@@ -19,52 +19,78 @@ static bool file_exists(const char *path) {
     return access(path, F_OK) == 0;
 }
 
+static void write_tar_header(stbup_tar_header *header, const char *name, uint64_t size) {
+    memset(header, 0, sizeof(*header));
+    strncpy(header->name, name, sizeof(header->name) - 1);
+    stbup_u64_to_octal(header->mode, sizeof(header->mode), 0100644);
+    stbup_u64_to_octal(header->uid, sizeof(header->uid), 0);
+    stbup_u64_to_octal(header->gid, sizeof(header->gid), 0);
+    stbup_u64_to_octal(header->size, sizeof(header->size), size);
+    stbup_u64_to_octal(header->mtime, sizeof(header->mtime), 0);
+    header->typeflag = '0';
+    memcpy(header->magic, "ustar", 5);
+    header->magic[5] = ' ';
+    header->version[0] = ' ';
+    header->version[1] = 0;
+
+    unsigned int checksum = stbup_tar_checksum(header);
+    char chksum_str[8];
+    snprintf(chksum_str, sizeof(chksum_str), "%06o", checksum);
+    memcpy(header->chksum, chksum_str, 6);
+    header->chksum[6] = 0;
+    header->chksum[7] = ' ';
+}
+
+static int create_zip_with_entry(const char *entry_name, const char *contents, size_t size, const char *zip_path) {
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+    if (!mz_zip_writer_init_heap(&zip, 0, 0)) {
+        return 0;
+    }
+
+    if (!mz_zip_writer_add_mem(&zip, entry_name, contents, size, MZ_DEFAULT_COMPRESSION)) {
+        mz_zip_writer_end(&zip);
+        return 0;
+    }
+
+    void *zip_data = NULL;
+    size_t zip_size = 0;
+    if (!mz_zip_writer_finalize_heap_archive(&zip, &zip_data, &zip_size)) {
+        mz_zip_writer_end(&zip);
+        return 0;
+    }
+
+    mz_zip_writer_end(&zip);
+
+    FILE *f = fopen(zip_path, "wb");
+    if (!f) {
+        mz_free(zip_data);
+        return 0;
+    }
+    int ok = (fwrite(zip_data, 1, zip_size, f) == zip_size);
+    fclose(f);
+    mz_free(zip_data);
+    return ok;
+}
+
 /**
  * Security Test 1: Path Traversal in TAR
  * 
  * Tests that TAR archives with malicious paths (../, absolute paths) are rejected.
  */
 static int test_tar_path_traversal(void) {
-    // Create a malicious TAR archive with ../ in the filename
-    // TAR header is exactly 512 bytes
-    unsigned char malicious_tar[512];
-    memset(malicious_tar, 0, sizeof(malicious_tar));
-    
-    // Set filename (field at offset 0, 100 bytes)
-    strncpy((char*)malicious_tar, "../../../etc/passwd", 100);
-    // Set mode (field at offset 100, 8 bytes)
-    strncpy((char*)malicious_tar + 100, "0000644", 8);
-    // Set size (field at offset 124, 12 bytes) - 10 bytes of data
-    strncpy((char*)malicious_tar + 124, "0000000010", 12);
-    // Set typeflag (field at offset 156, 1 byte) - regular file
-    malicious_tar[156] = '0';
-    // Set magic (field at offset 257, 6 bytes)
-    memcpy(malicious_tar + 257, "ustar ", 6);
-    // Set checksum (field at offset 148, 8 bytes) - simplified value
-    strncpy((char*)malicious_tar + 148, "0000000", 8);
-    
-    // Add file data (10 bytes) + padding to 512
-    unsigned char file_data[512] = {0};
-    memcpy(file_data, "malicious", 9);
-    
-    // Combine header + data
-    unsigned char full_tar[1024];
-    memcpy(full_tar, malicious_tar, 512);
-    memcpy(full_tar + 512, file_data, 512);
-    
-    // Try to extract - should fail due to path normalization
-    int result = stbup_tar_extract_stream(full_tar, sizeof(full_tar), "output/security_test");
-    
-    // Check that the malicious file was NOT created outside output directory
-    bool malicious_file_exists = file_exists("../../../etc/passwd") || 
-                                  file_exists("output/security_test/../../../etc/passwd");
-    
-    // Test should pass if extraction failed OR if malicious file doesn't exist
-    if (result == 0 || !malicious_file_exists) {
-        return 0; // Pass - path traversal was prevented
+    unsigned char archive[1024] = {0};
+    write_tar_header((stbup_tar_header *)archive, "../malicious.txt", 9);
+    memcpy(archive + 512, "malicious", 9);
+
+    stbup_mkdirs("output/security_test/tar_path");
+    int result = stbup_tar_extract_stream(archive, sizeof(archive), "output/security_test/tar_path");
+    bool wrote_inside = file_exists("output/security_test/tar_path/malicious.txt");
+
+    if (result == 0 && !wrote_inside) {
+        return 0;
     }
-    
-    return 1; // Fail - path traversal succeeded
+    return 1;
 }
 
 /**
@@ -75,15 +101,22 @@ static int test_tar_path_traversal(void) {
  * files with malicious paths don't get extracted outside the output directory.
  */
 static int test_zip_path_traversal(void) {
-    // This test would require creating a ZIP with a malicious path
-    // For now, we verify that the path normalization logic is in place
-    // by checking that extraction functions handle paths safely.
-    // A full test would require a ZIP file with ../ in filenames.
-    
-    // For now, we'll just verify the function exists and the code compiles
-    // A more complete test would create an actual ZIP with malicious paths
-    // and verify they're rejected during extraction.
-    return 0; // Pass - path normalization is implemented in stbup_zip_extract
+    stbup_mkdirs("output/security_test");
+    const char *zip_path = "output/security_test/malicious.zip";
+    const char *zip_out = "output/security_test/zip_out";
+    stbup_mkdirs(zip_out);
+
+    if (!create_zip_with_entry("../zip_evil.txt", "evil", 4, zip_path)) {
+        return 1;
+    }
+
+    int result = stbup_zip_extract(zip_path, zip_out);
+    remove(zip_path);
+
+    if (result == 0 && !file_exists("output/security_test/zip_out/zip_evil.txt")) {
+        return 0;
+    }
+    return 1;
 }
 
 /**
@@ -92,35 +125,13 @@ static int test_zip_path_traversal(void) {
  * Tests that TAR extraction handles truncated entries safely (doesn't read past buffer).
  */
 static int test_tar_truncated_entry(void) {
-    // Create a TAR with a header that claims a huge file size
-    // but the archive is truncated
-    unsigned char truncated_tar[1024];
-    memset(truncated_tar, 0, sizeof(truncated_tar));
-    
-    // Set filename
-    strncpy((char*)truncated_tar, "test_file.txt", 100);
-    // Set typeflag to regular file
-    truncated_tar[156] = '0';
-    // Set size to 1MB (but we only have 512 bytes of data)
-    strncpy((char*)truncated_tar + 124, "001000000", 12); // 1MB in octal
-    // Set mode
-    strncpy((char*)truncated_tar + 100, "0000644", 8);
-    // Set magic
-    memcpy(truncated_tar + 257, "ustar ", 6);
-    // Set checksum
-    strncpy((char*)truncated_tar + 148, "0000000", 8);
-    
-    // Add only 512 bytes of data (not 1MB)
-    memset(truncated_tar + 512, 'A', 512);
-    
-    // Try to extract - should handle truncation safely
-    // The function should detect that we don't have enough data
-    (void)stbup_tar_extract_stream(truncated_tar, sizeof(truncated_tar), "output/security_test");
-    
-    // The extraction should either fail gracefully or skip the entry
-    // The important thing is it doesn't crash or read past the buffer
-    // For this test, we just verify it doesn't crash (result can be 0 or 1)
-    return 0; // Pass if we get here without crashing
+    unsigned char archive[1024] = {0};
+    /* Claim a very large file but only provide one block */
+    write_tar_header((stbup_tar_header *)archive, "truncated.txt", 1024 * 1024);
+    memset(archive + 512, 'A', 512);
+
+    int result = stbup_tar_extract_stream(archive, sizeof(archive), "output/security_test/truncated");
+    return (result == 0) ? 0 : 1;
 }
 
 /**

@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 
 /* ============================================================
    Configuration
@@ -24,6 +25,7 @@
 #ifndef STBUP_PATH_MAX
 #define STBUP_PATH_MAX 1024
 #endif
+#define STBUP_MAX_PATH_COMPONENTS (STBUP_PATH_MAX / 2)
 
 /* ============================================================
    Platform filesystem layer
@@ -93,6 +95,112 @@ static int stbup_mkdirs(const char *path)
     return stbup_mkdir(tmp);
 }
 
+static int stbup_is_path_sep(char c)
+{
+    return c == '/' || c == '\\';
+}
+
+static int stbup_is_drive_letter(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+/* Join base directory with a relative entry path while preventing traversal */
+static int stbup_path_join_safe(char *dst, size_t dst_size, const char *base, const char *entry)
+{
+    if (!dst || !base || !entry || dst_size == 0)
+        return 0;
+
+    while (stbup_is_path_sep(*entry))
+        entry++;
+
+    if (*entry == 0)
+        return 0;
+
+    if (stbup_is_path_sep(entry[0]))
+        return 0;
+
+    if (stbup_is_drive_letter(entry[0]) && entry[1] == ':')
+        return 0;
+
+    char normalized[STBUP_PATH_MAX];
+    size_t component_starts[STBUP_MAX_PATH_COMPONENTS];
+    size_t depth = 0;
+    size_t norm_len = 0;
+    normalized[0] = 0;
+
+    const char *src = entry;
+    while (*src)
+    {
+        while (*src && stbup_is_path_sep(*src))
+            src++;
+        if (!*src)
+            break;
+
+        const char *component_start = src;
+        size_t comp_len = 0;
+        while (*src && !stbup_is_path_sep(*src))
+        {
+            comp_len++;
+            src++;
+        }
+
+        if (comp_len == 0)
+            continue;
+
+        if (comp_len == 1 && component_start[0] == '.')
+            continue;
+
+        if (comp_len == 2 && component_start[0] == '.' && component_start[1] == '.')
+        {
+            if (depth == 0)
+                return 0;
+            norm_len = component_starts[--depth];
+            normalized[norm_len] = 0;
+            continue;
+        }
+
+        if (depth >= STBUP_MAX_PATH_COMPONENTS)
+            return 0;
+
+        if (norm_len && norm_len + 1 >= sizeof(normalized))
+            return 0;
+        if (norm_len)
+            normalized[norm_len++] = '/';
+
+        component_starts[depth++] = norm_len;
+
+        if (norm_len + comp_len >= sizeof(normalized))
+            return 0;
+
+        memcpy(normalized + norm_len, component_start, comp_len);
+        norm_len += comp_len;
+        normalized[norm_len] = 0;
+    }
+
+    if (norm_len == 0)
+        return 0;
+
+    size_t base_len = strlen(base);
+    if (base_len >= dst_size)
+        return 0;
+
+    memcpy(dst, base, base_len);
+    if (base_len > 0 && !stbup_is_path_sep(dst[base_len - 1]))
+    {
+        if (base_len + 1 >= dst_size)
+            return 0;
+        dst[base_len++] = '/';
+    }
+
+    if (base_len + norm_len >= dst_size)
+        return 0;
+
+    memcpy(dst + base_len, normalized, norm_len);
+    dst[base_len + norm_len] = 0;
+    return 1;
+}
+
 /* get directory part of path */
 static void stbup_dirname(char *path)
 {
@@ -114,14 +222,7 @@ static void stbup_dirname(char *path)
 
 /**
  * Normalize and validate a path to prevent path traversal attacks.
- * 
- * This function:
- * - Rejects absolute paths (starting with / or drive letters on Windows)
- * - Collapses .. components
- * - Removes . components
- * - Normalizes path separators
- * - Ensures the final path stays within the output directory
- * 
+ *
  * @param entry_name The archive entry name (may contain .. or absolute paths)
  * @param out_dir The output directory (must be absolute or relative to current dir)
  * @param normalized_path Output buffer for normalized path (must be at least STBUP_PATH_MAX)
@@ -129,116 +230,7 @@ static void stbup_dirname(char *path)
  */
 static int stbup_normalize_path(const char *entry_name, const char *out_dir, char *normalized_path)
 {
-    /* Reject empty entry names */
-    if (!entry_name || entry_name[0] == '\0')
-        return 0;
-    
-    /* Reject absolute paths (Unix: starts with /, Windows: starts with drive letter) */
-#ifdef _WIN32
-    if ((entry_name[0] >= 'A' && entry_name[0] <= 'Z' && entry_name[1] == ':') ||
-        (entry_name[0] >= 'a' && entry_name[0] <= 'z' && entry_name[1] == ':'))
-        return 0;
-#endif
-    if (entry_name[0] == '/' || entry_name[0] == '\\')
-        return 0;
-    
-    /* Build normalized path by processing components */
-    char components[STBUP_PATH_MAX][STBUP_PATH_MAX];
-    int num_components = 0;
-    const char *p = entry_name;
-    char component[STBUP_PATH_MAX];
-    size_t comp_len = 0;
-    
-    /* Parse path into components */
-    while (*p && num_components < STBUP_PATH_MAX)
-    {
-        if (*p == '/' || *p == '\\')
-        {
-            if (comp_len > 0)
-            {
-                component[comp_len] = '\0';
-                /* Skip . components */
-                if (strcmp(component, ".") != 0)
-                {
-                    /* Handle .. components */
-                    if (strcmp(component, "..") == 0)
-                    {
-                        /* Go up one level, but don't go above root */
-                        if (num_components > 0)
-                            num_components--;
-                    }
-                    else
-                    {
-                        /* Normal component - add it */
-                        if (comp_len < STBUP_PATH_MAX - 1)
-                        {
-                            strncpy(components[num_components], component, STBUP_PATH_MAX - 1);
-                            components[num_components][STBUP_PATH_MAX - 1] = '\0';
-                            num_components++;
-                        }
-                    }
-                }
-                comp_len = 0;
-            }
-        }
-        else
-        {
-            if (comp_len < STBUP_PATH_MAX - 1)
-            {
-                component[comp_len++] = *p;
-            }
-        }
-        p++;
-    }
-    
-    /* Handle final component */
-    if (comp_len > 0)
-    {
-        component[comp_len] = '\0';
-        if (strcmp(component, ".") != 0)
-        {
-            if (strcmp(component, "..") == 0)
-            {
-                if (num_components > 0)
-                    num_components--;
-            }
-            else
-            {
-                if (comp_len < STBUP_PATH_MAX - 1)
-                {
-                    strncpy(components[num_components], component, STBUP_PATH_MAX - 1);
-                    components[num_components][STBUP_PATH_MAX - 1] = '\0';
-                    num_components++;
-                }
-            }
-        }
-    }
-    
-    /* Reject if we ended up with an empty path (all .. components) */
-    if (num_components == 0)
-        return 0;
-    
-    /* Build final normalized path */
-    size_t len = strlen(out_dir);
-    if (len >= STBUP_PATH_MAX - 1)
-        return 0;
-    
-    strncpy(normalized_path, out_dir, STBUP_PATH_MAX - 1);
-    normalized_path[STBUP_PATH_MAX - 1] = '\0';
-    
-    /* Append components */
-    for (int i = 0; i < num_components; i++)
-    {
-        len = strlen(normalized_path);
-        if (len + strlen(components[i]) + 2 >= STBUP_PATH_MAX)
-            return 0;
-        
-        normalized_path[len] = '/';
-        strncpy(normalized_path + len + 1, components[i], STBUP_PATH_MAX - len - 2);
-        normalized_path[STBUP_PATH_MAX - 1] = '\0';
-    }
-    
-    return 1;
+    return stbup_path_join_safe(normalized_path, STBUP_PATH_MAX, out_dir, entry_name);
 }
 
 static int stbup_write_file(const char *path, const void *data, size_t size)
@@ -392,12 +384,23 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
             prefix[prefix_len++] = h->prefix[i];
         prefix[prefix_len] = 0;
 
+        if (size > SIZE_MAX)
+            return 0;
+
+        if (size > UINT64_MAX - 511ULL)
+            return 0;
+
+        uint64_t aligned_size = (size + 511ULL) & ~511ULL;
+        uint64_t total_span = 512ULL + aligned_size;
+        if (total_span > (uint64_t)(end - p))
+            return 0;
+
+        size_t skip = (size_t)total_span;
+        size_t data_size = (size_t)size;
+
         if (name_len == 0)
         {
             /* advance to next header even if no name */
-            size_t skip = 512 + ((size + 511) & ~511);
-            if (p + skip > end)
-                break; /* Buffer overflow protection */
             p += skip;
             continue;
         }
@@ -407,42 +410,24 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
         if (prefix_len > 0)
         {
             if (snprintf(entry_path, sizeof(entry_path), "%s/%s", prefix, name) >= (int)sizeof(entry_path))
-                goto next_entry; /* Path too long */
+                return 0; /* Path too long */
         }
         else
         {
             if (snprintf(entry_path, sizeof(entry_path), "%s", name) >= (int)sizeof(entry_path))
-                goto next_entry; /* Path too long */
+                return 0; /* Path too long */
         }
         
         /* Normalize path to prevent path traversal attacks */
         char fullpath[STBUP_PATH_MAX];
         if (!stbup_normalize_path(entry_path, out_dir, fullpath))
-            goto next_entry; /* Invalid path (path traversal attempt) */
-
-        /* Validate that we have enough data for the file content */
-        size_t data_size = (size_t)size;
-        size_t skip = 512 + ((size + 511) & ~511);
-        if (p + skip > end)
-        {
-            /* Truncated archive - don't read past buffer */
-            break;
-        }
-        
-        /* Additional check: ensure we can read the actual file data */
-        if (h->typeflag == '0' || h->typeflag == '\0')
-        {
-            if (p + 512 + data_size > end)
-            {
-                /* File data extends past buffer - skip this entry */
-                goto next_entry;
-            }
-        }
+            return 0; /* Invalid path (path traversal attempt) */
 
         if (h->typeflag == '5')
         {
             /* directory */
-            stbup_mkdirs(fullpath);
+            if (!stbup_mkdirs(fullpath))
+                return 0;
         }
         else if (h->typeflag == '0' || h->typeflag == '\0')
         {
@@ -451,12 +436,12 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
             memcpy(dirpath, fullpath, sizeof(dirpath));
             stbup_dirname(dirpath);
             if (dirpath[0] && !stbup_mkdirs(dirpath))
-                goto next_entry; /* skip if we can't create parent dir */
-            if (stbup_write_file(fullpath, p + 512, data_size))
-                files_extracted++;
+                return 0; /* can't create parent dir */
+            if (!stbup_write_file(fullpath, p + 512, data_size))
+                return 0;
+            files_extracted++;
         }
 
-    next_entry:
         /* advance to next header */
         p += skip;
     }
@@ -2407,31 +2392,22 @@ static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
     }
 
     /* Validate gzip footer: CRC32 and original size */
-    if (compressed_size < header_size + 8)
-    {
-        free(dest);
-        return 0; /* Not enough data for footer */
-    }
-    
     const unsigned char *footer = p + compressed_size - 8;
     uint32_t stored_crc32 = (uint32_t)footer[0] | ((uint32_t)footer[1] << 8) |
                             ((uint32_t)footer[2] << 16) | ((uint32_t)footer[3] << 24);
     uint32_t stored_size = (uint32_t)footer[4] | ((uint32_t)footer[5] << 8) |
                            ((uint32_t)footer[6] << 16) | ((uint32_t)footer[7] << 24);
-    
-    /* Calculate CRC32 of decompressed data */
+
     unsigned long calculated_crc32 = crc32(0L, Z_NULL, 0);
     calculated_crc32 = crc32(calculated_crc32, (const Bytef *)dest, (uInt)dest_len);
-    
-    /* Validate CRC32 */
+
     if ((uint32_t)calculated_crc32 != stored_crc32)
     {
         free(dest);
         return 0; /* CRC32 mismatch - data corruption or tampering */
     }
-    
-    /* Validate original size */
-    if (dest_len != (size_t)stored_size)
+
+    if (((uint32_t)(dest_len & 0xffffffffu)) != stored_size)
     {
         free(dest);
         return 0; /* Size mismatch - data corruption or tampering */
@@ -2738,15 +2714,18 @@ static int stbup_zip_extract(const char *archive_path, const char *out_dir)
         char normalized_path[STBUP_PATH_MAX];
         if (!stbup_normalize_path(file_stat.m_filename, out_dir, normalized_path))
         {
-            /* Invalid path (path traversal attempt) - skip this entry */
-            continue;
+            success = 0;
+            break;
         }
 
         /* Skip directories */
         if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
         {
-            /* Create directory */
-            stbup_mkdirs(normalized_path);
+            if (!stbup_mkdirs(normalized_path))
+            {
+                success = 0;
+                break;
+            }
             continue;
         }
 
@@ -2759,23 +2738,17 @@ static int stbup_zip_extract(const char *archive_path, const char *out_dir)
             break;
         }
 
-        /* Use normalized path for file writing */
-        char file_path[STBUP_PATH_MAX];
-        strncpy(file_path, normalized_path, sizeof(file_path) - 1);
-        file_path[sizeof(file_path) - 1] = '\0';
-
-        /* Create directory if needed */
-        char *last_slash = strrchr(file_path, '/');
-        char *last_backslash = strrchr(file_path, '\\');
-        if (last_slash || last_backslash)
+        char dir_path[STBUP_PATH_MAX];
+        memcpy(dir_path, normalized_path, sizeof(dir_path));
+        stbup_dirname(dir_path);
+        if (dir_path[0] && !stbup_mkdirs(dir_path))
         {
-            char *last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
-            *last_sep = '\0';
-            stbup_mkdirs(file_path);
-            *last_sep = '/';
+            mz_free(p);
+            success = 0;
+            break;
         }
 
-        if (!stbup_write_file(file_path, p, uncomp_size))
+        if (!stbup_write_file(normalized_path, p, uncomp_size))
         {
             mz_free(p);
             success = 0;
