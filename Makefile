@@ -22,31 +22,51 @@ all: build
 # Build test programs
 build: $(TEST_DIR)/build/test $(TEST_DIR)/build/test_create $(TEST_DIR)/build/test_targz $(TEST_DIR)/build/test_zip
 
-$(TEST_DIR)/build/test: $(TEST_DIR)/src/test.c stb_unpack.h miniz.c
+$(TEST_DIR)/build/test: $(TEST_DIR)/src/test.c stb_unpack.h
 	@echo "Building extraction test..."
 	@mkdir -p $(TEST_DIR)/build
-	@$(CC) $(TEST_DIR)/src/test.c miniz.c -o $(TEST_DIR)/build/test $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@if grep -q "Embedded miniz.h - DO NOT EDIT" stb_unpack.h; then \
+		$(CC) $(TEST_DIR)/src/test.c -o $(TEST_DIR)/build/test $(CFLAGS) -I.; \
+	else \
+		$(CC) $(TEST_DIR)/src/test.c miniz.c -o $(TEST_DIR)/build/test $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION; \
+	fi
 
-$(TEST_DIR)/build/test_create: $(TEST_DIR)/src/test_create.c stb_unpack.h miniz.c
+$(TEST_DIR)/build/test_create: $(TEST_DIR)/src/test_create.c stb_unpack.h
 	@echo "Building creation test..."
 	@mkdir -p $(TEST_DIR)/build
-	@$(CC) $(TEST_DIR)/src/test_create.c miniz.c -o $(TEST_DIR)/build/test_create $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@if grep -q "Embedded miniz.h - DO NOT EDIT" stb_unpack.h; then \
+		$(CC) $(TEST_DIR)/src/test_create.c -o $(TEST_DIR)/build/test_create $(CFLAGS) -I.; \
+	else \
+		$(CC) $(TEST_DIR)/src/test_create.c miniz.c -o $(TEST_DIR)/build/test_create $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION; \
+	fi
 
-$(TEST_DIR)/build/test_targz: $(TEST_DIR)/src/test_targz.c stb_unpack.h miniz.c
+$(TEST_DIR)/build/test_targz: $(TEST_DIR)/src/test_targz.c stb_unpack.h
 	@echo "Building .tar.gz test..."
 	@mkdir -p $(TEST_DIR)/build
-	@$(CC) $(TEST_DIR)/src/test_targz.c miniz.c -o $(TEST_DIR)/build/test_targz $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@if grep -q "Embedded miniz.h - DO NOT EDIT" stb_unpack.h; then \
+		$(CC) $(TEST_DIR)/src/test_targz.c -o $(TEST_DIR)/build/test_targz $(CFLAGS) -I.; \
+	else \
+		$(CC) $(TEST_DIR)/src/test_targz.c miniz.c -o $(TEST_DIR)/build/test_targz $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION; \
+	fi
 
-$(TEST_DIR)/build/test_zip: $(TEST_DIR)/src/test_zip.c stb_unpack.h miniz.c
+$(TEST_DIR)/build/test_zip: $(TEST_DIR)/src/test_zip.c stb_unpack.h
 	@echo "Building .zip test..."
 	@mkdir -p $(TEST_DIR)/build
-	@$(CC) $(TEST_DIR)/src/test_zip.c miniz.c -o $(TEST_DIR)/build/test_zip $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@if grep -q "Embedded miniz.h - DO NOT EDIT" stb_unpack.h; then \
+		$(CC) $(TEST_DIR)/src/test_zip.c -o $(TEST_DIR)/build/test_zip $(CFLAGS) -I.; \
+	else \
+		$(CC) $(TEST_DIR)/src/test_zip.c miniz.c -o $(TEST_DIR)/build/test_zip $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION; \
+	fi
 
 # Build example program
-example/extract_src: example/extract_src.c stb_unpack.h miniz.c
+example/extract_src: example/extract_src.c stb_unpack.h
 	@echo "Building extract_src example..."
 	@mkdir -p example
-	@$(CC) example/extract_src.c miniz.c -o example/extract_src $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@if grep -q "Embedded miniz.h - DO NOT EDIT" stb_unpack.h; then \
+		$(CC) example/extract_src.c -o example/extract_src $(CFLAGS) -I.; \
+	else \
+		$(CC) example/extract_src.c miniz.c -o example/extract_src $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION; \
+	fi
 
 # Run tests (builds first if needed)
 test: build
