@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+nob
+*.old
+
 # Object files
 *.o
 *.ko
@@ -54,13 +57,14 @@ dkms.conf
 # debug information files
 *.dwo
 
-# Test outputs
-test/*.tar
-test/test
-test/test_create
-test/test.exe
-test/out/
-test/tar_extracted/
-test/our_*.tar
-test/tar_*.tar
-test/test_reference.tar
+# Test executables (all in test/build/)
+test/build/
+# Test runner executable
+test/build/test_runner
+
+# Test outputs (all generated files go to test/output/)
+test/output/
+
+# Example outputs
+example/extract_src
+example/src/
