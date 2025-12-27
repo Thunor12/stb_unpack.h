@@ -1,18 +1,6 @@
 /*
 ------------------------------------------------------------------------------
    stb_unpack.h - stb-style archive extraction helper (WIP)
-
-   Public domain / MIT-0
-
-   Phase 1:
-   - Arena allocator
-   - Portable filesystem helpers
-   - Streaming TAR parser
-
-   Phase 2:
-   - gzip (miniz)
-   - zip (miniz)
-
 ------------------------------------------------------------------------------
 */
 
@@ -31,67 +19,11 @@
 #define STBUP_ASSERT(x) assert(x)
 #endif
 
-#ifndef STBUP_ARENA_ALLOC
 #include <stdlib.h>
-#define STBUP_ARENA_ALLOC(sz) malloc(sz)
-#define STBUP_ARENA_FREE(p) free(p)
-#endif
 
 #ifndef STBUP_PATH_MAX
 #define STBUP_PATH_MAX 1024
 #endif
-
-/* ============================================================
-   Arena allocator
-   ============================================================ */
-
-typedef struct stbup_arena
-{
-    unsigned char *base;
-    size_t size;
-    size_t used;
-    int owns_memory;
-} stbup_arena;
-
-static stbup_arena stbup_make_arena(void *buffer, size_t size)
-{
-    stbup_arena a;
-    a.base = (unsigned char *)buffer;
-    a.size = size;
-    a.used = 0;
-    a.owns_memory = 0;
-    return a;
-}
-
-static stbup_arena stbup_make_heap_arena(size_t size)
-{
-    stbup_arena a;
-    a.base = (unsigned char *)STBUP_ARENA_ALLOC(size);
-    a.size = size;
-    a.used = 0;
-    a.owns_memory = 1;
-    return a;
-}
-
-static void stbup_free_arena(stbup_arena *a)
-{
-    if (a->owns_memory && a->base)
-        STBUP_ARENA_FREE(a->base);
-    a->base = NULL;
-    a->size = a->used = 0;
-}
-
-static void *stbup_arena_alloc(stbup_arena *a, size_t sz)
-{
-    sz = (sz + 7) & ~7; /* align */
-    if (a->used + sz > a->size)
-        return NULL;
-    void *p = a->base + a->used;
-    a->used += sz;
-    return p;
-}
-
-static void stbup_arena_reset(stbup_arena *a) { a->used = 0; }
 
 /* ============================================================
    Platform filesystem layer
@@ -290,12 +222,6 @@ static unsigned int stbup_tar_checksum(const stbup_tar_header *h)
 /* ============================================================
    TAR streaming extractor
    ============================================================ */
-
-typedef struct
-{
-    FILE *out;
-    char out_dir[STBUP_PATH_MAX];
-} stbup_tar_ctx;
 
 static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
                                     const char *out_dir)
@@ -621,12 +547,6 @@ static int stbup_tar_create_file(const char *archive_path, const char *file_path
 #include "miniz.h"
 #endif
 
-/* Type mappings for zlib compatibility */
-typedef unsigned char Bytef;
-typedef unsigned int uInt;
-typedef unsigned long uLong;
-typedef unsigned long uLongf;
-
 /* Zlib-compatible constants */
 #ifndef Z_NULL
 #define Z_NULL NULL
@@ -706,18 +626,6 @@ typedef struct z_stream z_stream;
 #endif
 
 #endif /* STBUP_USE_MINIZ */
-
-/* Gzip header structure */
-typedef struct
-{
-    unsigned char id1;    /* 0x1f */
-    unsigned char id2;    /* 0x8b */
-    unsigned char method; /* 8 = deflate */
-    unsigned char flags;
-    unsigned char mtime[4];
-    unsigned char xfl;
-    unsigned char os;
-} stbup_gzip_header;
 
 #if STBUP_HAS_MINIZ
 /* Decompress gzip data */
