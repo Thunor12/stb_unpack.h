@@ -22,6 +22,27 @@ static bool file_exists(const char *path) {
     return access(path, F_OK) == 0;
 }
 
+// Check if a command is available in PATH
+static bool command_available(const char *cmd) {
+    Nob_Cmd test_cmd = {0};
+#ifdef _WIN32
+    nob_cmd_append(&test_cmd, "where", cmd);
+#else
+    nob_cmd_append(&test_cmd, "which", cmd);
+#endif
+    Nob_Cmd_Opt opt = {0};
+#ifdef _WIN32
+    opt.stdout_path = "nul";
+    opt.stderr_path = "nul";
+#else
+    opt.stdout_path = "/dev/null";
+    opt.stderr_path = "/dev/null";
+#endif
+    bool available = nob_cmd_run_opt(&test_cmd, opt);
+    nob_cmd_free(test_cmd);
+    return available;
+}
+
 // Check if miniz is available (embedded or external)
 static bool miniz_available(void) {
     const char *stb_paths[] = {"../stb_unpack.h", "../../stb_unpack.h", "stb_unpack.h", NULL};
@@ -124,6 +145,11 @@ static int test_tar_extract(void) {
 
 // Test 2: TAR Creation
 static int test_tar_create(void) {
+    if (!command_available("tar")) {
+        printf("⚠ TAR Creation Test: SKIPPED (tar command not available)\n");
+        return -1; // Special return code for skipped
+    }
+    
     // Create test input file
     FILE *f = fopen("input/test_input.txt", "w");
     if (!f) return 1;
@@ -165,6 +191,11 @@ static int test_tar_create(void) {
 
 // Test 3: TAR Compatibility (our archives readable by tar)
 static int test_tar_compat(void) {
+    if (!command_available("tar")) {
+        printf("⚠ TAR Compatibility Test: SKIPPED (tar command not available)\n");
+        return -1; // Special return code for skipped
+    }
+    
     // Create test file
     FILE *f = fopen("input/test_compat_input.txt", "w");
     if (!f) return 1;
@@ -244,6 +275,11 @@ static int test_targz_basic(void) {
 
 // Test 5: .tar.gz compatibility (our archives readable by tar)
 static int test_targz_compat(void) {
+    if (!command_available("tar")) {
+        printf("⚠ .tar.gz Compatibility Test: SKIPPED (tar command not available)\n");
+        return -1; // Special return code for skipped
+    }
+    
     // Create test file
     FILE *f = fopen("input/test_targz_compat.txt", "w");
     if (!f) return 1;
@@ -325,6 +361,11 @@ static int test_zip_basic(void) {
 
 // Test 7: .zip compatibility (our archives readable by unzip)
 static int test_zip_compat(void) {
+    if (!command_available("unzip")) {
+        printf("⚠ .zip Compatibility Test: SKIPPED (unzip command not available)\n");
+        return -1; // Special return code for skipped
+    }
+    
     // Create test file
     FILE *f = fopen("input/test_zip_compat.txt", "w");
     if (!f) return 1;
@@ -425,6 +466,11 @@ static int test_targz_comprehensive(void) {
 
 // Test 9: .zip comprehensive (multiple files and directories)
 static int test_zip_comprehensive(void) {
+    if (!command_available("zip")) {
+        printf("⚠ .zip Comprehensive Test: SKIPPED (zip command not available)\n");
+        return -1; // Special return code for skipped
+    }
+    
     // Create test directory structure
     stbup_mkdirs("output/zip_comprehensive/temp/zip_test1");
     
@@ -500,7 +546,10 @@ int main(int argc, char **argv) {
         }
         
         int result = tests[i].func();
-        if (result == 0) {
+        if (result == -1) {
+            // Test was skipped (return code -1 indicates skip)
+            continue;
+        } else if (result == 0) {
             printf("✓ %s: PASSED\n", tests[i].name);
             passed++;
         } else {
