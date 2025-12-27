@@ -59,3 +59,7 @@ test/build/
 
 # Test outputs (all generated files go to test/output/)
 test/output/
+
+# Example outputs
+example/extract_src
+example/src/

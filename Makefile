@@ -14,7 +14,7 @@ ifeq ($(shell which gcc 2>/dev/null),)
   endif
 endif
 
-.PHONY: all build test test-extract test-create test-compat test-targz test-targz-compat test-all clean help
+.PHONY: all build test test-extract test-create test-compat test-targz test-targz-compat test-all example clean help
 
 # Default target
 all: build
@@ -42,6 +42,12 @@ $(TEST_DIR)/build/test_zip: $(TEST_DIR)/src/test_zip.c stb_unpack.h miniz.c
 	@mkdir -p $(TEST_DIR)/build
 	@$(CC) $(TEST_DIR)/src/test_zip.c miniz.c -o $(TEST_DIR)/build/test_zip $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
+# Build example program
+example/extract_src: example/extract_src.c stb_unpack.h miniz.c
+	@echo "Building extract_src example..."
+	@mkdir -p example
+	@$(CC) example/extract_src.c miniz.c -o example/extract_src $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+
 # Run tests (builds first if needed)
 test: build
 	@cd $(TEST_DIR) && ./run_all_tests.sh
@@ -64,11 +70,15 @@ test-targz-compat: $(TEST_DIR)/test_targz
 # Alias for test
 test-all: test
 
+# Build example (alias for example/extract_src)
+example: example/extract_src
+
 # Clean build artifacts and test outputs
 clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf $(TEST_DIR)/build
 	@rm -rf $(TEST_DIR)/output
+	@rm -f example/extract_src
 	@echo "Clean complete."
 
 # Help
@@ -85,6 +95,7 @@ help:
 	@echo "  make test-targz     - Build and run .tar.gz test"
 	@echo "  make test-targz-compat - Build and run .tar.gz compatibility test"
 	@echo "  make test-all      - Alias for 'make test'"
+	@echo "  make example      - Build extract_src example"
 	@echo "  make clean         - Remove all build artifacts and test outputs"
 	@echo "  make help          - Show this help"
 	@echo ""
