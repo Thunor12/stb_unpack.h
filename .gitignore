@@ -59,6 +59,8 @@ dkms.conf
 
 # Test executables (all in test/build/)
 test/build/
+# Test runner executable
+test/build/test_runner
 
 # Test outputs (all generated files go to test/output/)
 test/output/

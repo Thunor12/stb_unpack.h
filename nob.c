@@ -209,6 +209,8 @@ int main(int argc, char **argv)
         return 1;
     if (!compile_test_exe("test_zip", TEST_SRC_DIR "test_zip.c"))
         return 1;
+    if (!compile_test_exe("test_runner", TEST_SRC_DIR "test_runner.c"))
+        return 1;
 
     // Build example
     if (do_example || argc == 0)
@@ -228,10 +230,30 @@ int main(int argc, char **argv)
         }
 
         nob_log(NOB_INFO, "Running tests...");
+        Nob_String_Builder test_runner_path = {0};
+        nob_sb_appendf(&test_runner_path, "%stest_runner", BUILD_DIR);
+        
+        // Change to test directory before running tests
+        char *old_cwd = getcwd(NULL, 0);
+        if (chdir("test") != 0) {
+            nob_log(NOB_ERROR, "Failed to change to test directory");
+            nob_sb_free(test_runner_path);
+            if (old_cwd) free(old_cwd);
+            return 1;
+        }
+        
         Nob_Cmd test_cmd = { 0 };
-        nob_cmd_append(&test_cmd, "bash", "test/run_all_tests.sh");
+        nob_cmd_append(&test_cmd, "build/test_runner");
         int test_result = nob_cmd_run(&test_cmd);
         nob_cmd_free(test_cmd);
+        
+        // Change back
+        if (old_cwd) {
+            chdir(old_cwd);
+            free(old_cwd);
+        }
+        
+        nob_sb_free(test_runner_path);
 
         if (!test_result)
         {
