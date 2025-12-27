@@ -99,7 +99,6 @@ test_case "Small text file" "${TEST_DIR}/small.tar.gz" "small.txt"
 echo "=== Test 3: Large text file ==="
 mkdir -p "${TEST_DIR}/temp"
 head -c 10000 /dev/urandom | base64 > "${TEST_DIR}/temp/large.txt" 2>/dev/null || \
-    python3 -c "import random, string; print(''.join(random.choices(string.ascii_letters, k=10000)))" > "${TEST_DIR}/temp/large.txt" 2>/dev/null || \
     (for i in {1..1000}; do echo "This is line $i with some content to make the file larger."; done > "${TEST_DIR}/temp/large.txt")
 (cd "${TEST_DIR}/temp" && ../../../build/test_targz -c "../large.tar.gz" large.txt) >/dev/null 2>&1
 # Update test_case to compare against temp location
@@ -127,8 +126,7 @@ fi
 echo "=== Test 4: Binary file ==="
 mkdir -p "${TEST_DIR}/temp"
 head -c 512 /dev/urandom > "${TEST_DIR}/temp/binary.bin" 2>/dev/null || \
-    python3 -c "import os; open('${TEST_DIR}/temp/binary.bin', 'wb').write(os.urandom(512))" 2>/dev/null || \
-    (dd if=/dev/zero of="${TEST_DIR}/temp/binary.bin" bs=512 count=1 2>/dev/null || echo -ne '\x00\x01\x02\x03' > "${TEST_DIR}/temp/binary.bin")
+    (dd if=/dev/zero of="${TEST_DIR}/temp/binary.bin" bs=512 count=1 2>/dev/null || printf '\x00\x01\x02\x03%.0s' {1..128} > "${TEST_DIR}/temp/binary.bin")
 (cd "${TEST_DIR}/temp" && ../../../build/test_targz -c "../binary.tar.gz" binary.bin) >/dev/null 2>&1
 # Update test_case to compare against temp location
 rm -rf "${TEST_DIR}/out"
@@ -190,8 +188,7 @@ fi
 echo "=== Test 7: File exactly 512 bytes ==="
 mkdir -p "${TEST_DIR}/temp"
 head -c 512 /dev/urandom > "${TEST_DIR}/temp/exact512.bin" 2>/dev/null || \
-    python3 -c "import os; open('${TEST_DIR}/temp/exact512.bin', 'wb').write(os.urandom(512))" 2>/dev/null || \
-    (dd if=/dev/zero of="${TEST_DIR}/temp/exact512.bin" bs=512 count=1 2>/dev/null || printf '%*s' 512 | tr ' ' '\x00' > "${TEST_DIR}/temp/exact512.bin")
+    (dd if=/dev/zero of="${TEST_DIR}/temp/exact512.bin" bs=512 count=1 2>/dev/null || printf '\x00%.0s' {1..512} > "${TEST_DIR}/temp/exact512.bin")
 (cd "${TEST_DIR}/temp" && ../../../build/test_targz -c "../exact512.tar.gz" exact512.bin) >/dev/null 2>&1
 # Update test_case to compare against temp location
 rm -rf "${TEST_DIR}/out"
@@ -304,11 +301,9 @@ fi
 echo "=== Test 14: Binary files ==="
 mkdir -p "${TEST_DIR}/temp/targz_test6"
 head -c 1024 /dev/urandom > "${TEST_DIR}/temp/targz_test6/binary1.bin" 2>/dev/null || \
-    python3 -c "import os; open('${TEST_DIR}/temp/targz_test6/binary1.bin', 'wb').write(os.urandom(1024))" 2>/dev/null || \
-    (dd if=/dev/zero of="${TEST_DIR}/temp/targz_test6/binary1.bin" bs=1024 count=1 2>/dev/null || echo -ne '\x00\x01\x02\x03' > "${TEST_DIR}/temp/targz_test6/binary1.bin")
+    (dd if=/dev/zero of="${TEST_DIR}/temp/targz_test6/binary1.bin" bs=1024 count=1 2>/dev/null || printf '\x00\x01\x02\x03%.0s' {1..256} > "${TEST_DIR}/temp/targz_test6/binary1.bin")
 head -c 512 /dev/urandom > "${TEST_DIR}/temp/targz_test6/binary2.bin" 2>/dev/null || \
-    python3 -c "import os; open('${TEST_DIR}/temp/targz_test6/binary2.bin', 'wb').write(os.urandom(512))" 2>/dev/null || \
-    (dd if=/dev/zero of="${TEST_DIR}/temp/targz_test6/binary2.bin" bs=512 count=1 2>/dev/null || echo -ne '\x04\x05\x06\x07' > "${TEST_DIR}/temp/targz_test6/binary2.bin")
+    (dd if=/dev/zero of="${TEST_DIR}/temp/targz_test6/binary2.bin" bs=512 count=1 2>/dev/null || printf '\x04\x05\x06\x07%.0s' {1..128} > "${TEST_DIR}/temp/targz_test6/binary2.bin")
 echo "Text file" > "${TEST_DIR}/temp/targz_test6/text.txt"
 (cd "${TEST_DIR}/temp/targz_test6" && tar czf ../../../../${TEST_DIR}/binary.tar.gz binary1.bin binary2.bin text.txt) >/dev/null 2>&1
 # Note: Multi-file .tar.gz extraction currently has a known issue with archives created by standard tar

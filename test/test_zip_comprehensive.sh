@@ -107,11 +107,9 @@ test_extract "Empty directory" "${TEST_DIR}/emptydir.zip" "input/zip_test6"
 echo "=== Test 7: Binary files ==="
 mkdir -p "${TEST_DIR}/temp/zip_test7"
 head -c 1024 /dev/urandom > "${TEST_DIR}/temp/zip_test7/binary1.bin" 2>/dev/null || \
-    python3 -c "import os; open('${TEST_DIR}/temp/zip_test7/binary1.bin', 'wb').write(os.urandom(1024))" 2>/dev/null || \
-    (dd if=/dev/zero of="${TEST_DIR}/temp/zip_test7/binary1.bin" bs=1024 count=1 2>/dev/null || echo -ne '\x00\x01\x02\x03' > "${TEST_DIR}/temp/zip_test7/binary1.bin")
+    (dd if=/dev/zero of="${TEST_DIR}/temp/zip_test7/binary1.bin" bs=1024 count=1 2>/dev/null || printf '\x00\x01\x02\x03%.0s' {1..256} > "${TEST_DIR}/temp/zip_test7/binary1.bin")
 head -c 512 /dev/urandom > "${TEST_DIR}/temp/zip_test7/binary2.bin" 2>/dev/null || \
-    python3 -c "import os; open('${TEST_DIR}/temp/zip_test7/binary2.bin', 'wb').write(os.urandom(512))" 2>/dev/null || \
-    (dd if=/dev/zero of="${TEST_DIR}/temp/zip_test7/binary2.bin" bs=512 count=1 2>/dev/null || echo -ne '\x04\x05\x06\x07' > "${TEST_DIR}/temp/zip_test7/binary2.bin")
+    (dd if=/dev/zero of="${TEST_DIR}/temp/zip_test7/binary2.bin" bs=512 count=1 2>/dev/null || printf '\x04\x05\x06\x07%.0s' {1..128} > "${TEST_DIR}/temp/zip_test7/binary2.bin")
 echo "Text file" > "${TEST_DIR}/temp/zip_test7/text.txt"
 (cd "${TEST_DIR}/temp/zip_test7" && zip -q ../../../../${TEST_DIR}/binary.zip binary1.bin binary2.bin text.txt) >/dev/null 2>&1
 test_extract "Binary files" "${TEST_DIR}/binary.zip" "${TEST_DIR}/temp/zip_test7"
