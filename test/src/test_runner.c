@@ -1,3 +1,22 @@
+/*
+ * Test Runner for stb_unpack.h
+ * 
+ * This is a C-based test runner that executes all tests for the stb_unpack.h library.
+ * It replaces the previous bash scripts for better cross-platform compatibility.
+ * 
+ * The test runner:
+ * - Detects if miniz is available (embedded or external)
+ * - Checks for external tools (tar, unzip, zip) and skips tests if unavailable
+ * - Runs 9 comprehensive test suites
+ * - Reports pass/fail/skip status for each test
+ * - Provides a summary at the end
+ * 
+ * Test return codes:
+ *   0 = Test passed
+ *   1 = Test failed
+ *  -1 = Test skipped (external tool not available)
+ */
+
 #define STB_UNPACK_IMPLEMENTATION
 #include "../../stb_unpack.h"
 #define NOB_IMPLEMENTATION
@@ -8,6 +27,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+// Platform-specific includes for file access
 #ifdef _WIN32
 #include <io.h>
 #define access _access
@@ -17,14 +37,25 @@
 #include <sys/stat.h>
 #endif
 
-// Check if file exists
-// TODO use nob function "nob_file_exists" instead
+/**
+ * Check if a file exists
+ * 
+ * @param path Path to the file
+ * @return true if file exists, false otherwise
+ */
 static bool file_exists(const char *path) {
     return access(path, F_OK) == 0;
 }
 
-// Get executable path with .exe extension on Windows
-// Note: Returns a pointer to a static buffer, so don't use multiple times in the same expression
+/**
+ * Get executable path with .exe extension on Windows
+ * 
+ * On Windows, executables have .exe extension. This function handles that.
+ * Note: Returns a pointer to a static buffer, so don't use multiple times in the same expression.
+ * 
+ * @param base_path Base path without extension
+ * @return Path with .exe on Windows, original path on Unix
+ */
 static const char* exe_path(const char *base_path) {
 #ifdef _WIN32
     static char win_path[256];
@@ -38,7 +69,15 @@ static const char* exe_path(const char *base_path) {
 #endif
 }
 
-// Check if a command is available in PATH
+/**
+ * Check if a command is available in PATH
+ * 
+ * Uses 'which' on Unix and 'where' on Windows to check if a command exists.
+ * This is used to determine if external tools (tar, unzip, zip) are available.
+ * 
+ * @param cmd Command name to check (e.g., "tar", "unzip", "zip")
+ * @return true if command is available, false otherwise
+ */
 static bool command_available(const char *cmd) {
     Nob_Cmd test_cmd = {0};
 #ifdef _WIN32
@@ -59,7 +98,15 @@ static bool command_available(const char *cmd) {
     return available;
 }
 
-// Check if miniz is available (embedded or external)
+/**
+ * Check if miniz is available (embedded or external)
+ * 
+ * miniz can be either:
+ * - Embedded in stb_unpack.h (checked by looking for marker)
+ * - External files (miniz.h and miniz.c in repository root)
+ * 
+ * @return true if miniz is available, false otherwise
+ */
 static bool miniz_available(void) {
     const char *stb_paths[] = {"../stb_unpack.h", "../../stb_unpack.h", "stb_unpack.h", NULL};
     const char *miniz_c_paths[] = {"../miniz.c", "../../miniz.c", "miniz.c", NULL};
@@ -89,7 +136,15 @@ static bool miniz_available(void) {
     return false;
 }
 
-// Compare two files
+/**
+ * Compare two files for equality
+ * 
+ * Reads both files and compares their contents byte-by-byte.
+ * 
+ * @param path1 Path to first file
+ * @param path2 Path to second file
+ * @return true if files are identical, false otherwise
+ */
 static bool files_equal(const char *path1, const char *path2) {
     Nob_String_Builder content1 = {0};
     Nob_String_Builder content2 = {0};
@@ -110,7 +165,18 @@ static bool files_equal(const char *path1, const char *path2) {
     return equal;
 }
 
-// Run a test executable with arguments (silent - status printed by caller)
+/**
+ * Run a test executable with arguments
+ * 
+ * Executes a test program and redirects output to null (silent operation).
+ * Status is printed by the caller, not by this function.
+ * 
+ * @param exe_path_arg Path to executable (may or may not have .exe)
+ * @param test_name Name of the test (for logging, currently unused)
+ * @param argc Number of arguments
+ * @param argv Array of argument strings
+ * @return 0 on success, 1 on failure
+ */
 static int run_test_exe(const char *exe_path_arg, const char *test_name, int argc, char **argv) {
     (void)test_name; // Status printed by caller
     
@@ -164,7 +230,14 @@ static int run_test_exe(const char *exe_path_arg, const char *test_name, int arg
     return result;
 }
 
-// Test 1: TAR Extraction
+/**
+ * Test 1: TAR Extraction
+ * 
+ * Creates a TAR archive using the system tar command, then extracts it
+ * using stbup_tar_extract_stream to verify extraction works correctly.
+ * 
+ * @return 0 on success, 1 on failure
+ */
 static int test_tar_extract(void) {
     // Create test archive using tar command (for compatibility)
     Nob_Cmd cmd = {0};
@@ -185,7 +258,15 @@ static int test_tar_extract(void) {
     return run_test_exe(exe_path("build/test"), "TAR Extraction Test", 0, args);
 }
 
-// Test 2: TAR Creation
+/**
+ * Test 2: TAR Creation
+ * 
+ * Creates a TAR archive using stbup_tar_create_file, then verifies it
+ * can be extracted by the standard tar tool. This ensures our TARs are
+ * compatible with standard tools.
+ * 
+ * @return 0 on success, 1 on failure, -1 if skipped (tar not available)
+ */
 static int test_tar_create(void) {
     if (!command_available("tar")) {
         printf("⚠ TAR Creation Test: SKIPPED (tar command not available)\n");
@@ -231,7 +312,14 @@ static int test_tar_create(void) {
     return files_equal("input/test_input.txt", "output/our_extracted/test_input.txt") ? 0 : 1;
 }
 
-// Test 3: TAR Compatibility (our archives readable by tar)
+/**
+ * Test 3: TAR Compatibility
+ * 
+ * Ensures that TAR archives created by our library can be read by
+ * standard tar tools. This is a compatibility verification test.
+ * 
+ * @return 0 on success, 1 on failure, -1 if skipped (tar not available)
+ */
 static int test_tar_compat(void) {
     if (!command_available("tar")) {
         printf("⚠ TAR Compatibility Test: SKIPPED (tar command not available)\n");
@@ -278,7 +366,15 @@ static int test_tar_compat(void) {
     return files_equal("input/test_compat_input.txt", "output/tar_extracted/test_compat_input.txt") ? 0 : 1;
 }
 
-// Test 4: .tar.gz basic
+/**
+ * Test 4: .tar.gz Basic Test
+ * 
+ * Tests basic .tar.gz creation and extraction functionality.
+ * Creates a .tar.gz archive and then extracts it to verify both
+ * operations work correctly.
+ * 
+ * @return 0 on success, 1 on failure
+ */
 static int test_targz_basic(void) {
     // Create test file
     FILE *f = fopen("input/test_targz_input.txt", "w");
@@ -315,7 +411,14 @@ static int test_targz_basic(void) {
     return files_equal("input/test_targz_input.txt", "output/targz_out/test_targz_input.txt") ? 0 : 1;
 }
 
-// Test 5: .tar.gz compatibility (our archives readable by tar)
+/**
+ * Test 5: .tar.gz Compatibility
+ * 
+ * Ensures that .tar.gz archives created by our library can be read by
+ * standard tar tools. This verifies gzip compression compatibility.
+ * 
+ * @return 0 on success, 1 on failure, -1 if skipped (tar not available)
+ */
 static int test_targz_compat(void) {
     if (!command_available("tar")) {
         printf("⚠ .tar.gz Compatibility Test: SKIPPED (tar command not available)\n");
@@ -364,7 +467,15 @@ static int test_targz_compat(void) {
     return files_equal("input/test_targz_compat.txt", "output/tar_extracted_targz/test_targz_compat.txt") ? 0 : 1;
 }
 
-// Test 6: .zip basic
+/**
+ * Test 6: .zip Basic Test
+ * 
+ * Tests basic ZIP creation and extraction functionality.
+ * Creates a ZIP archive and then extracts it to verify both
+ * operations work correctly.
+ * 
+ * @return 0 on success, 1 on failure
+ */
 static int test_zip_basic(void) {
     // Create test file
     FILE *f = fopen("input/test_zip_input.txt", "w");
@@ -401,7 +512,14 @@ static int test_zip_basic(void) {
     return files_equal("input/test_zip_input.txt", "output/zip_out/test_zip_input.txt") ? 0 : 1;
 }
 
-// Test 7: .zip compatibility (our archives readable by unzip)
+/**
+ * Test 7: .zip Compatibility
+ * 
+ * Ensures that ZIP archives created by our library can be read by
+ * standard unzip tools. This verifies ZIP format compatibility.
+ * 
+ * @return 0 on success, 1 on failure, -1 if skipped (unzip not available)
+ */
 static int test_zip_compat(void) {
     if (!command_available("unzip")) {
         printf("⚠ .zip Compatibility Test: SKIPPED (unzip command not available)\n");
@@ -450,7 +568,14 @@ static int test_zip_compat(void) {
     return files_equal("input/test_zip_compat.txt", "output/zip_extracted/test_zip_compat.txt") ? 0 : 1;
 }
 
-// Test 8: .tar.gz comprehensive (single file test - multi-file has known limitations)
+/**
+ * Test 8: .tar.gz Comprehensive Test
+ * 
+ * Additional edge case testing for .tar.gz archives.
+ * Currently tests single-file archives (multi-file has known limitations).
+ * 
+ * @return 0 on success, 1 on failure
+ */
 static int test_targz_comprehensive(void) {
     // Create test file
     stbup_mkdirs("output/comprehensive/temp");
@@ -506,7 +631,14 @@ static int test_targz_comprehensive(void) {
     return files_equal("output/comprehensive/temp/single.txt", "output/comprehensive/out/single.txt") ? 0 : 1;
 }
 
-// Test 9: .zip comprehensive (multiple files and directories)
+/**
+ * Test 9: .zip Comprehensive Test
+ * 
+ * Additional edge case testing for ZIP archives, including
+ * directory structures and multiple files.
+ * 
+ * @return 0 on success, 1 on failure, -1 if skipped (zip not available)
+ */
 static int test_zip_comprehensive(void) {
     if (!command_available("zip")) {
         printf("⚠ .zip Comprehensive Test: SKIPPED (zip command not available)\n");
@@ -550,12 +682,24 @@ static int test_zip_comprehensive(void) {
     return files_equal("output/zip_comprehensive/temp/zip_test1/single.txt", "output/zip_comprehensive/out/single.txt") ? 0 : 1;
 }
 
+/**
+ * Test case structure
+ * 
+ * Each test has a name, a function pointer, and a flag indicating
+ * whether it requires miniz (for compression support).
+ */
 typedef struct {
-    const char *name;
-    int (*func)(void);
-    bool requires_miniz;
+    const char *name;           // Test name for display
+    int (*func)(void);          // Test function (returns 0=pass, 1=fail, -1=skip)
+    bool requires_miniz;        // Whether test requires miniz
 } TestCase;
 
+/**
+ * Test suite array
+ * 
+ * All tests are registered here. The main function iterates through
+ * this array and runs each test.
+ */
 static const TestCase tests[] = {
     {"TAR Extraction Test", test_tar_extract, false},
     {"TAR Creation Test", test_tar_create, false},
@@ -568,28 +712,45 @@ static const TestCase tests[] = {
     {".zip Comprehensive Test", test_zip_comprehensive, true},
 };
 
+/**
+ * Main test runner
+ * 
+ * Executes all registered tests and provides a summary.
+ * Tests that require miniz are skipped if miniz is not available.
+ * Tests that require external tools (tar, unzip, zip) are skipped
+ * if those tools are not found (with a warning).
+ * 
+ * Exit codes:
+ *   0 = All tests passed
+ *   1 = One or more tests failed
+ */
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
     
-    // Ensure output directories exist
+    // Ensure output directories exist (tests create files here)
     stbup_mkdirs("output");
     stbup_mkdirs("output/comprehensive");
     stbup_mkdirs("output/zip_comprehensive");
     
+    // Test statistics
     int passed = 0;
     int failed = 0;
     bool has_miniz = miniz_available();
     
+    // Run all tests
     for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        // Skip tests that require miniz if miniz is not available
         if (tests[i].requires_miniz && !has_miniz) {
             printf("⚠ %s: SKIPPED (miniz not available)\n", tests[i].name);
             continue;
         }
         
+        // Execute the test
         int result = tests[i].func();
         if (result == -1) {
-            // Test was skipped (return code -1 indicates skip)
+            // Test was skipped (return code -1 indicates skip, e.g., external tool not available)
+            // Status already printed by the test function
             continue;
         } else if (result == 0) {
             printf("✓ %s: PASSED\n", tests[i].name);
@@ -600,7 +761,7 @@ int main(int argc, char **argv) {
         }
     }
     
-    // Summary
+    // Print summary
     printf("\n");
     if (failed == 0) {
         printf("✓ All tests passed! (%d/%d)\n", passed, passed + failed);

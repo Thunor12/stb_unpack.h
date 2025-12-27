@@ -1,19 +1,49 @@
+/*
+ * stb_unpack.h Build System
+ * 
+ * This is a single-file build system using nob.c (similar to make).
+ * It handles:
+ * - Building the nob build system itself
+ * - Compiling test programs
+ * - Compiling example programs
+ * - Running the test suite
+ * - Cleaning build artifacts
+ * 
+ * Usage:
+ *   ./nob              # Build and run tests (default)
+ *   ./nob build        # Build test programs only
+ *   ./nob test         # Build and run all tests
+ *   ./nob example      # Build example program
+ *   ./nob clean        # Clean build artifacts
+ *   ./nob help         # Show help message
+ */
+
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
+// Compiler configuration
 #ifdef _WIN32
-#define CC "gcc.exe"
+#define CC "gcc.exe"  // Windows uses gcc.exe
 #else
-#define CC "gcc"
+#define CC "gcc"      // Unix-like systems use gcc
 #endif
 
-#define BUILD_DIR "test/build/"
-#define TEST_SRC_DIR "test/src/"
-#define EXAMPLE_DIR "example/"
+// Directory paths
+#define BUILD_DIR "test/build/"      // Where compiled test executables go
+#define TEST_SRC_DIR "test/src/"     // Where test source files are
+#define EXAMPLE_DIR "example/"       // Where example programs are
 
+// Compiler flags
 #define CFLAGS "-std=c99", "-Wall", "-Wextra", "-I.", "-D_POSIX_C_SOURCE=200809L"
 
-// Check if miniz is embedded in stb_unpack.h
+/**
+ * Check if miniz is embedded in stb_unpack.h
+ * 
+ * When miniz is embedded, we don't need to compile miniz.c separately.
+ * This function checks for the embedded marker in stb_unpack.h.
+ * 
+ * @return 1 if miniz is embedded, 0 otherwise
+ */
 static int is_miniz_embedded(void)
 {
     Nob_String_Builder content = { 0 };
@@ -26,7 +56,18 @@ static int is_miniz_embedded(void)
     return embedded;
 }
 
-// Compile a test executable
+/**
+ * Compile a test executable
+ * 
+ * Compiles a test program from source, handling:
+ * - Windows vs Unix executable naming (.exe extension)
+ * - Conditional miniz.c linking (only if not embedded)
+ * - Incremental builds (skips if up-to-date)
+ * 
+ * @param exe_name Name of the executable (without extension)
+ * @param src_file Path to the source file
+ * @return 1 on success, 0 on failure
+ */
 static int compile_test_exe(const char *exe_name, const char *src_file)
 {
     Nob_Cmd cmd = { 0 };
@@ -73,7 +114,16 @@ static int compile_test_exe(const char *exe_name, const char *src_file)
     return ok;
 }
 
-// Compile example executable
+/**
+ * Compile an example executable
+ * 
+ * Similar to compile_test_exe, but for example programs.
+ * Examples are built in the example/ directory.
+ * 
+ * @param exe_name Name of the executable (without extension)
+ * @param src_file Path to the source file
+ * @return 1 on success, 0 on failure
+ */
 static int compile_example_exe(const char *exe_name, const char *src_file)
 {
     Nob_Cmd cmd = { 0 };
@@ -122,8 +172,10 @@ static int compile_example_exe(const char *exe_name, const char *src_file)
 
 int main(int argc, char **argv)
 {
+    // Auto-rebuild nob if nob.c or nob.h changed
     NOB_GO_REBUILD_URSELF(argc, argv);
 
+    // Ensure required directories exist
     if (!nob_mkdir_if_not_exists(BUILD_DIR))
     {
         return 1;
@@ -133,13 +185,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    nob_shift_args(&argc, &argv); // Ignore program name
+    // Parse command-line arguments
+    nob_shift_args(&argc, &argv); // Skip program name
 
-    int do_test = 0;
-    int do_example = 0;
-    int do_clean = 0;
+    int do_test = 0;      // Run tests flag
+    int do_example = 0;   // Build example flag
+    int do_clean = 0;     // Clean flag
 
-    // Parse arguments
+    // Parse command-line arguments
     for (int i = 0; i < argc; i++)
     {
         const char *arg = argv[i];
@@ -158,7 +211,8 @@ int main(int argc, char **argv)
         }
         else if (strcmp(arg, "build") == 0)
         {
-            // Just build, don't run tests
+            // "build" command: just compile, don't run tests
+            // This is handled by the build section below
         }
         else if (strcmp(arg, "help") == 0 || strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0)
         {
@@ -220,17 +274,17 @@ int main(int argc, char **argv)
     if (!compile_test_exe("test_runner", TEST_SRC_DIR "test_runner.c"))
         return 1;
 
-    // Build example
+    // Build example program (if requested or if no args provided)
     if (do_example || argc == 0)
     {
         if (!compile_example_exe("extract_src", EXAMPLE_DIR "extract_src.c"))
             return 1;
     }
 
-    // Run tests if requested
+    // Run tests (if requested or if no args provided - default behavior)
     if (do_test || argc == 0)
     {
-        // Ensure test output directory exists (tests need it)
+        // Ensure test output directory exists (tests create files here)
         if (!nob_mkdir_if_not_exists("test/output"))
         {
             nob_log(NOB_ERROR, "Failed to create test/output directory");
@@ -238,18 +292,17 @@ int main(int argc, char **argv)
         }
 
         nob_log(NOB_INFO, "Running tests...");
-        Nob_String_Builder test_runner_path = {0};
-        nob_sb_appendf(&test_runner_path, "%stest_runner", BUILD_DIR);
         
         // Change to test directory before running tests
+        // This is necessary because test_runner expects to run from test/ directory
         char *old_cwd = getcwd(NULL, 0);
         if (chdir("test") != 0) {
             nob_log(NOB_ERROR, "Failed to change to test directory");
-            nob_sb_free(test_runner_path);
             if (old_cwd) free(old_cwd);
             return 1;
         }
         
+        // Run the test runner executable
         Nob_Cmd test_cmd = { 0 };
 #ifdef _WIN32
         nob_cmd_append(&test_cmd, "build/test_runner.exe");
@@ -259,14 +312,13 @@ int main(int argc, char **argv)
         int test_result = nob_cmd_run(&test_cmd);
         nob_cmd_free(test_cmd);
         
-        // Change back
+        // Restore original working directory
         if (old_cwd) {
             chdir(old_cwd);
             free(old_cwd);
         }
-        
-        nob_sb_free(test_runner_path);
 
+        // Return failure if tests failed
         if (!test_result)
         {
             return 1;
