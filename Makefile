@@ -20,7 +20,7 @@ endif
 all: build
 
 # Build test programs
-build: $(TEST_DIR)/build/test $(TEST_DIR)/build/test_create $(TEST_DIR)/build/test_targz
+build: $(TEST_DIR)/build/test $(TEST_DIR)/build/test_create $(TEST_DIR)/build/test_targz $(TEST_DIR)/build/test_zip
 
 $(TEST_DIR)/build/test: $(TEST_DIR)/src/test.c stb_unpack.h miniz.c
 	@echo "Building extraction test..."
@@ -36,6 +36,11 @@ $(TEST_DIR)/build/test_targz: $(TEST_DIR)/src/test_targz.c stb_unpack.h miniz.c
 	@echo "Building .tar.gz test..."
 	@mkdir -p $(TEST_DIR)/build
 	@$(CC) $(TEST_DIR)/src/test_targz.c miniz.c -o $(TEST_DIR)/build/test_targz $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+
+$(TEST_DIR)/build/test_zip: $(TEST_DIR)/src/test_zip.c stb_unpack.h miniz.c
+	@echo "Building .zip test..."
+	@mkdir -p $(TEST_DIR)/build
+	@$(CC) $(TEST_DIR)/src/test_zip.c miniz.c -o $(TEST_DIR)/build/test_zip $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
 # Run tests (builds first if needed)
 test: build

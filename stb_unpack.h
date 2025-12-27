@@ -531,12 +531,12 @@ static int stbup_tar_create_file(const char *archive_path, const char *file_path
 /* Embedded miniz for deflate/inflate - true dependency-free */
 #define STBUP_HAS_MINIZ 1
 
-/* Miniz configuration - disable features we don't need */
+/* Miniz configuration - enable ZIP APIs, but disable time for smaller footprint */
 #ifndef MINIZ_NO_STDIO
-#define MINIZ_NO_STDIO
+/* We need stdio for ZIP file operations */
 #endif
 #ifndef MINIZ_NO_ARCHIVE_APIS
-#define MINIZ_NO_ARCHIVE_APIS
+/* Enable ZIP archive APIs for .zip support */
 #endif
 #ifndef MINIZ_NO_TIME
 #define MINIZ_NO_TIME
@@ -1017,8 +1017,120 @@ static int stbup_targz_create_file(const char *archive_path, const char *file_pa
   free(compressed_data);
   return ret;
 }
+
+/* Extract .zip archive */
+static int stbup_zip_extract(const char *archive_path, const char *out_dir) {
+  mz_zip_archive zip_archive;
+  memset(&zip_archive, 0, sizeof(zip_archive));
+  
+  /* Initialize ZIP reader */
+  if (!mz_zip_reader_init_file(&zip_archive, archive_path, 0)) {
+    return 0;
+  }
+  
+  /* Get number of files */
+  mz_uint num_files = mz_zip_reader_get_num_files(&zip_archive);
+  int success = 1;
+  
+  /* Extract each file */
+  for (mz_uint i = 0; i < num_files; i++) {
+    mz_zip_archive_file_stat file_stat;
+    if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat)) {
+      success = 0;
+      break;
+    }
+    
+    /* Skip directories */
+    if (mz_zip_reader_is_file_a_directory(&zip_archive, i)) {
+      /* Create directory */
+      char dir_path[STBUP_PATH_MAX];
+      if (snprintf(dir_path, sizeof(dir_path), "%s/%s", out_dir, file_stat.m_filename) >= (int)sizeof(dir_path)) {
+        success = 0;
+        break;
+      }
+      stbup_mkdirs(dir_path);
+      continue;
+    }
+    
+    /* Extract file to memory */
+    size_t uncomp_size = 0;
+    void *p = mz_zip_reader_extract_to_heap(&zip_archive, i, &uncomp_size, 0);
+    if (!p) {
+      success = 0;
+      break;
+    }
+    
+    /* Write file to disk */
+    char file_path[STBUP_PATH_MAX];
+    if (snprintf(file_path, sizeof(file_path), "%s/%s", out_dir, file_stat.m_filename) >= (int)sizeof(file_path)) {
+      mz_free(p);
+      success = 0;
+      break;
+    }
+    
+    /* Create directory if needed */
+    char *last_slash = strrchr(file_path, '/');
+    char *last_backslash = strrchr(file_path, '\\');
+    if (last_slash || last_backslash) {
+      char *last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+      *last_sep = '\0';
+      stbup_mkdirs(file_path);
+      *last_sep = '/';
+    }
+    
+    if (!stbup_write_file(file_path, p, uncomp_size)) {
+      mz_free(p);
+      success = 0;
+      break;
+    }
+    
+    mz_free(p);
+  }
+  
+  mz_zip_reader_end(&zip_archive);
+  return success;
+}
+
+/* Create .zip archive from a file */
+static int stbup_zip_create_file(const char *archive_path, const char *file_path) {
+  void *file_data = NULL;
+  size_t file_size = 0;
+  if (!stbup_read_file(file_path, &file_data, &file_size))
+    return 0;
+  
+  /* Extract filename from path */
+  const char *filename = file_path;
+  const char *last_slash = strrchr(file_path, '/');
+  const char *last_backslash = strrchr(file_path, '\\');
+  if (last_slash || last_backslash) {
+    const char *last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+    filename = last_sep + 1;
+  }
+  
+  mz_zip_archive zip_archive;
+  memset(&zip_archive, 0, sizeof(zip_archive));
+  
+  /* Initialize ZIP writer */
+  if (!mz_zip_writer_init_file(&zip_archive, archive_path, 0)) {
+    free(file_data);
+    return 0;
+  }
+  
+  /* Add file to archive */
+  mz_bool success = mz_zip_writer_add_mem(&zip_archive, filename, file_data, file_size, MZ_DEFAULT_COMPRESSION);
+  
+  /* Finalize archive */
+  if (success) {
+    success = mz_zip_writer_finalize_archive(&zip_archive);
+  }
+  
+  mz_zip_writer_end(&zip_archive);
+  free(file_data);
+  
+  return success ? 1 : 0;
+}
 #else
-/* Stub functions when zlib is not available */
+/* Stub functions when miniz is not available */
 static int stbup_targz_extract(const char *archive_path, const char *out_dir) {
   (void)archive_path;
   (void)out_dir;
@@ -1026,6 +1138,18 @@ static int stbup_targz_extract(const char *archive_path, const char *out_dir) {
 }
 
 static int stbup_targz_create_file(const char *archive_path, const char *file_path) {
+  (void)archive_path;
+  (void)file_path;
+  return 0;
+}
+
+static int stbup_zip_extract(const char *archive_path, const char *out_dir) {
+  (void)archive_path;
+  (void)out_dir;
+  return 0;
+}
+
+static int stbup_zip_create_file(const char *archive_path, const char *file_path) {
   (void)archive_path;
   (void)file_path;
   return 0;

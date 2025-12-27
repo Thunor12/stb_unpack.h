@@ -1,0 +1,3 @@
+Compatibility test for .zip
+This archive should be readable by standard tools.
+Testing ZIP compression compatibility.

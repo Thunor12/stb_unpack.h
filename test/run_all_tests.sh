@@ -37,11 +37,13 @@ run_test "TAR Extraction Test" "./test_extract.sh"
 run_test "TAR Creation Test" "./test_create.sh"
 run_test "TAR Compatibility Test" "./test_tar_compat.sh"
 
-# Check if miniz is available for .tar.gz tests
+# Check if miniz is available for .tar.gz and .zip tests
 if [ -f "../miniz.c" ] && [ -f "../miniz.h" ]; then
     run_test ".tar.gz Test" "./test_targz.sh"
     run_test ".tar.gz Compatibility Test" "./test_targz_compat.sh"
     run_test ".tar.gz Comprehensive Test" "./test_targz_comprehensive.sh"
+    run_test ".zip Test" "./test_zip.sh"
+    run_test ".zip Compatibility Test" "./test_zip_compat.sh"
 fi
 
 # Summary

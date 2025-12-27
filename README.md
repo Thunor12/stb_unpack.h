@@ -69,8 +69,9 @@ Current implementation includes:
 - ✅ Portable filesystem abstraction
 - ✅ Streaming TAR parser/extractor
 - ✅ TAR archive creator
-- ✅ GZIP compression/decompression (requires zlib)
+- ✅ GZIP compression/decompression (via embedded miniz)
 - ✅ .tar.gz archive support (extract & create)
+- ✅ .zip archive support (extract & create, via embedded miniz)
 
 Planned features are outlined below.
 
@@ -99,7 +100,7 @@ Many small C projects need to:
 - **Single header**
   - `#define STB_UNPACK_IMPLEMENTATION`
 - **No external dependencies**
-  - Compression handled via embedded code (copied code from miniz)
+  - Compression and ZIP support via embedded miniz library
 - **Extract-to-disk only**
   - No in-memory archive APIs
 - **Portable filesystem layer**
@@ -119,8 +120,8 @@ When finished, **stb_unpack.h** will support:
 
 ### Archive formats
 - ✅ `.tar` (extract & create)
-- ✅ `.tar.gz` (extract & create, requires zlib)
-- ⏳ `.zip` (planned, non-encrypted)
+- ✅ `.tar.gz` (extract & create, via embedded miniz)
+- ✅ `.zip` (extract & create, via embedded miniz, non-encrypted)
 
 ### Extraction
 - ✅ Extract archives **to disk**
