@@ -18,8 +18,24 @@
 #endif
 
 // Check if file exists
+// TODO use nob function "nob_file_exists" instead
 static bool file_exists(const char *path) {
     return access(path, F_OK) == 0;
+}
+
+// Get executable path with .exe extension on Windows
+// Note: Returns a pointer to a static buffer, so don't use multiple times in the same expression
+static const char* exe_path(const char *base_path) {
+#ifdef _WIN32
+    static char win_path[256];
+    if (snprintf(win_path, sizeof(win_path), "%s.exe", base_path) >= (int)sizeof(win_path)) {
+        // Truncated, return original
+        return base_path;
+    }
+    return win_path;
+#else
+    return base_path;
+#endif
 }
 
 // Check if a command is available in PATH
@@ -95,14 +111,40 @@ static bool files_equal(const char *path1, const char *path2) {
 }
 
 // Run a test executable with arguments (silent - status printed by caller)
-static int run_test_exe(const char *exe_path, const char *test_name, int argc, char **argv) {
+static int run_test_exe(const char *exe_path_arg, const char *test_name, int argc, char **argv) {
     (void)test_name; // Status printed by caller
-    if (!file_exists(exe_path)) {
+    
+    // Determine the actual executable path (handle .exe on Windows)
+    const char *actual_path = exe_path_arg;
+#ifdef _WIN32
+    // On Windows, try with .exe first, then without
+    size_t len = strlen(exe_path_arg);
+    if (len >= 4 && strcmp(exe_path_arg + len - 4, ".exe") == 0) {
+        // Already has .exe, use as-is
+        if (!file_exists(exe_path_arg)) {
+            return 1;
+        }
+        actual_path = exe_path_arg;
+    } else {
+        // Try with .exe
+        static char win_path[256];
+        snprintf(win_path, sizeof(win_path), "%s.exe", exe_path_arg);
+        if (file_exists(win_path)) {
+            actual_path = win_path;
+        } else if (file_exists(exe_path_arg)) {
+            actual_path = exe_path_arg;
+        } else {
+            return 1;
+        }
+    }
+#else
+    if (!file_exists(exe_path_arg)) {
         return 1;
     }
+#endif
     
     Nob_Cmd cmd = {0};
-    nob_cmd_append(&cmd, exe_path);
+    nob_cmd_append(&cmd, actual_path);
     for (int i = 0; i < argc; i++) {
         nob_cmd_append(&cmd, argv[i]);
     }
@@ -140,7 +182,7 @@ static int test_tar_extract(void) {
     
     // Run extraction test
     char *args[] = {};
-    return run_test_exe("build/test", "TAR Extraction Test", 0, args);
+    return run_test_exe(exe_path("build/test"), "TAR Extraction Test", 0, args);
 }
 
 // Test 2: TAR Creation
@@ -160,7 +202,7 @@ static int test_tar_create(void) {
     
     // Create archive with our tool
     char *args[] = {"output/our_archive.tar", "input/test_input.txt"};
-    if (run_test_exe("build/test_create", "TAR Creation Test", 2, args) != 0) {
+    if (run_test_exe(exe_path("build/test_create"), "TAR Creation Test", 2, args) != 0) {
         return 1;
     }
     
@@ -207,7 +249,7 @@ static int test_tar_compat(void) {
     
     // Create archive with our tool
     char *args[] = {"output/our_compat_archive.tar", "input/test_compat_input.txt"};
-    if (run_test_exe("build/test_create", "TAR Compatibility Test", 2, args) != 0) {
+    if (run_test_exe(exe_path("build/test_create"), "TAR Compatibility Test", 2, args) != 0) {
         return 1;
     }
     
@@ -248,7 +290,7 @@ static int test_targz_basic(void) {
     
     // Create archive
     Nob_Cmd create_cmd = {0};
-    nob_cmd_append(&create_cmd, "build/test_targz", "-c", "output/test_archive.tar.gz", "input/test_targz_input.txt");
+    nob_cmd_append(&create_cmd, exe_path("build/test_targz"), "-c", "output/test_archive.tar.gz", "input/test_targz_input.txt");
     if (!nob_cmd_run(&create_cmd)) {
         nob_cmd_free(create_cmd);
         return 1;
@@ -262,7 +304,7 @@ static int test_targz_basic(void) {
     // Extract
     stbup_mkdirs("output/targz_out");
     char *extract_args[] = {"output/test_archive.tar.gz", "output/targz_out"};
-    if (run_test_exe("build/test_targz", ".tar.gz Test", 2, extract_args) != 0) {
+    if (run_test_exe(exe_path("build/test_targz"), ".tar.gz Test", 2, extract_args) != 0) {
         return 1;
     }
     
@@ -290,7 +332,7 @@ static int test_targz_compat(void) {
     
     // Create archive with our tool
     Nob_Cmd create_cmd = {0};
-    nob_cmd_append(&create_cmd, "build/test_targz", "-c", "output/our_targz_archive.tar.gz", "input/test_targz_compat.txt");
+    nob_cmd_append(&create_cmd, exe_path("build/test_targz"), "-c", "output/our_targz_archive.tar.gz", "input/test_targz_compat.txt");
     if (!nob_cmd_run(&create_cmd)) {
         nob_cmd_free(create_cmd);
         return 1;
@@ -334,7 +376,7 @@ static int test_zip_basic(void) {
     
     // Create archive
     Nob_Cmd create_cmd = {0};
-    nob_cmd_append(&create_cmd, "build/test_zip", "-c", "output/test_archive.zip", "input/test_zip_input.txt");
+    nob_cmd_append(&create_cmd, exe_path("build/test_zip"), "-c", "output/test_archive.zip", "input/test_zip_input.txt");
     if (!nob_cmd_run(&create_cmd)) {
         nob_cmd_free(create_cmd);
         return 1;
@@ -348,7 +390,7 @@ static int test_zip_basic(void) {
     // Extract
     stbup_mkdirs("output/zip_out");
     char *extract_args[] = {"output/test_archive.zip", "output/zip_out"};
-    if (run_test_exe("build/test_zip", ".zip Test", 2, extract_args) != 0) {
+    if (run_test_exe(exe_path("build/test_zip"), ".zip Test", 2, extract_args) != 0) {
         return 1;
     }
     
@@ -376,7 +418,7 @@ static int test_zip_compat(void) {
     
     // Create archive with our tool
     Nob_Cmd create_cmd = {0};
-    nob_cmd_append(&create_cmd, "build/test_zip", "-c", "output/our_zip_archive.zip", "input/test_zip_compat.txt");
+    nob_cmd_append(&create_cmd, exe_path("build/test_zip"), "-c", "output/our_zip_archive.zip", "input/test_zip_compat.txt");
     if (!nob_cmd_run(&create_cmd)) {
         nob_cmd_free(create_cmd);
         return 1;
@@ -419,7 +461,7 @@ static int test_targz_comprehensive(void) {
     
     // Create archive using our own function (like other tests)
     Nob_Cmd create_cmd = {0};
-    nob_cmd_append(&create_cmd, "build/test_targz", "-c", "output/comprehensive/single.tar.gz", "output/comprehensive/temp/single.txt");
+    nob_cmd_append(&create_cmd, exe_path("build/test_targz"), "-c", "output/comprehensive/single.tar.gz", "output/comprehensive/temp/single.txt");
     Nob_Cmd_Opt opt_create = {0};
 #ifdef _WIN32
     opt_create.stdout_path = "nul";
@@ -441,7 +483,7 @@ static int test_targz_comprehensive(void) {
     // Extract with our tool using test_targz executable
     stbup_mkdirs("output/comprehensive/out");
     Nob_Cmd extract_cmd = {0};
-    nob_cmd_append(&extract_cmd, "build/test_targz", "output/comprehensive/single.tar.gz", "output/comprehensive/out");
+    nob_cmd_append(&extract_cmd, exe_path("build/test_targz"), "output/comprehensive/single.tar.gz", "output/comprehensive/out");
     Nob_Cmd_Opt opt_extract = {0};
 #ifdef _WIN32
     opt_extract.stdout_path = "nul";

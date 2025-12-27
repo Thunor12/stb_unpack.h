@@ -31,7 +31,11 @@ static int compile_test_exe(const char *exe_name, const char *src_file)
 {
     Nob_Cmd cmd = { 0 };
     Nob_String_Builder out_path = { 0 };
+#ifdef _WIN32
+    nob_sb_appendf(&out_path, "%s%s.exe", BUILD_DIR, exe_name);
+#else
     nob_sb_appendf(&out_path, "%s%s", BUILD_DIR, exe_name);
+#endif
 
     Nob_File_Paths deps = { 0 };
     nob_da_append(&deps, src_file);
@@ -74,7 +78,11 @@ static int compile_example_exe(const char *exe_name, const char *src_file)
 {
     Nob_Cmd cmd = { 0 };
     Nob_String_Builder out_path = { 0 };
+#ifdef _WIN32
+    nob_sb_appendf(&out_path, "%s%s.exe", EXAMPLE_DIR, exe_name);
+#else
     nob_sb_appendf(&out_path, "%s%s", EXAMPLE_DIR, exe_name);
+#endif
 
     Nob_File_Paths deps = { 0 };
     nob_da_append(&deps, src_file);
@@ -243,7 +251,11 @@ int main(int argc, char **argv)
         }
         
         Nob_Cmd test_cmd = { 0 };
+#ifdef _WIN32
+        nob_cmd_append(&test_cmd, "build/test_runner.exe");
+#else
         nob_cmd_append(&test_cmd, "build/test_runner");
+#endif
         int test_result = nob_cmd_run(&test_cmd);
         nob_cmd_free(test_cmd);
         
