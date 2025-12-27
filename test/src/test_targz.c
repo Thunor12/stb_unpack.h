@@ -1,5 +1,5 @@
 #define STB_UNPACK_IMPLEMENTATION
-#include "../stb_unpack.h"
+#include "../../stb_unpack.h"
 
 #include <stdio.h>
 #include <stdlib.h>

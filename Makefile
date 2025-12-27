@@ -20,19 +20,22 @@ endif
 all: build
 
 # Build test programs
-build: $(TEST_DIR)/test $(TEST_DIR)/test_create $(TEST_DIR)/test_targz
+build: $(TEST_DIR)/build/test $(TEST_DIR)/build/test_create $(TEST_DIR)/build/test_targz
 
-$(TEST_DIR)/test: $(TEST_DIR)/test.c stb_unpack.h miniz.c miniz_tdef.c miniz_tinfl.c
+$(TEST_DIR)/build/test: $(TEST_DIR)/src/test.c stb_unpack.h miniz.c
 	@echo "Building extraction test..."
-	@$(CC) $(TEST_DIR)/test.c miniz.c miniz_tdef.c miniz_tinfl.c -o $(TEST_DIR)/test $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@mkdir -p $(TEST_DIR)/build
+	@$(CC) $(TEST_DIR)/src/test.c miniz.c -o $(TEST_DIR)/build/test $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
-$(TEST_DIR)/test_create: $(TEST_DIR)/test_create.c stb_unpack.h miniz.c miniz_tdef.c miniz_tinfl.c
+$(TEST_DIR)/build/test_create: $(TEST_DIR)/src/test_create.c stb_unpack.h miniz.c
 	@echo "Building creation test..."
-	@$(CC) $(TEST_DIR)/test_create.c miniz.c miniz_tdef.c miniz_tinfl.c -o $(TEST_DIR)/test_create $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@mkdir -p $(TEST_DIR)/build
+	@$(CC) $(TEST_DIR)/src/test_create.c miniz.c -o $(TEST_DIR)/build/test_create $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
-$(TEST_DIR)/test_targz: $(TEST_DIR)/test_targz.c stb_unpack.h miniz.c miniz_tdef.c miniz_tinfl.c
+$(TEST_DIR)/build/test_targz: $(TEST_DIR)/src/test_targz.c stb_unpack.h miniz.c
 	@echo "Building .tar.gz test..."
-	@$(CC) $(TEST_DIR)/test_targz.c miniz.c miniz_tdef.c miniz_tinfl.c -o $(TEST_DIR)/test_targz $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
+	@mkdir -p $(TEST_DIR)/build
+	@$(CC) $(TEST_DIR)/src/test_targz.c miniz.c -o $(TEST_DIR)/build/test_targz $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
 # Run tests (builds first if needed)
 test: build
@@ -59,9 +62,8 @@ test-all: test
 # Clean build artifacts and test outputs
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -f $(TEST_DIR)/test $(TEST_DIR)/test_create $(TEST_DIR)/test_targz $(TEST_DIR)/test.exe
-	@rm -f $(TEST_DIR)/*.tar $(TEST_DIR)/*.tar.gz
-	@rm -rf $(TEST_DIR)/out $(TEST_DIR)/tar_extracted $(TEST_DIR)/targz_out $(TEST_DIR)/tar_extracted_targz
+	@rm -rf $(TEST_DIR)/build
+	@rm -rf $(TEST_DIR)/output
 	@echo "Clean complete."
 
 # Help

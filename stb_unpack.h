@@ -170,9 +170,9 @@ static int stbup_write_file(const char *path, const void *data, size_t size) {
   FILE *f = fopen(path, "wb");
   if (!f)
     return 0;
-  fwrite(data, 1, size, f);
+  size_t written = fwrite(data, 1, size, f);
   fclose(f);
-  return 1;
+  return (written == size);
 }
 
 /* ============================================================
@@ -269,6 +269,7 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
                                     const char *out_dir) {
   const unsigned char *p = (const unsigned char *)tar_data;
   const unsigned char *end = p + tar_size;
+  int files_extracted = 0;
 
   while (p + 512 <= end) {
     const stbup_tar_header *h = (const stbup_tar_header *)p;
@@ -300,8 +301,12 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
       prefix[prefix_len++] = h->prefix[i];
     prefix[prefix_len] = 0;
 
-    if (name_len == 0)
-      continue; /* skip entries with no name */
+    if (name_len == 0) {
+      /* advance to next header even if no name */
+      size_t skip = 512 + ((size + 511) & ~511);
+      p += skip;
+      continue;
+    }
 
     char fullpath[STBUP_PATH_MAX];
     if (prefix_len > 0) {
@@ -319,16 +324,18 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
       memcpy(dirpath, fullpath, sizeof(dirpath));
       stbup_dirname(dirpath);
       if (dirpath[0] && !stbup_mkdirs(dirpath))
-        continue; /* skip if we can't create parent dir */
-      stbup_write_file(fullpath, p + 512, (size_t)size);
+        goto next_entry; /* skip if we can't create parent dir */
+      if (stbup_write_file(fullpath, p + 512, (size_t)size))
+        files_extracted++;
     }
 
+next_entry:
     /* advance to next header */
     size_t skip = 512 + ((size + 511) & ~511);
     p += skip;
   }
 
-  return 1;
+  return files_extracted > 0;
 }
 
 /* ============================================================
@@ -536,7 +543,7 @@ static int stbup_tar_create_file(const char *archive_path, const char *file_path
 #endif
 
 /* Include miniz.h for type definitions (z_stream, etc.) */
-/* The implementation (miniz.c, miniz_tdef.c, miniz_tinfl.c) is compiled separately */
+/* The implementation (miniz.c) is compiled separately */
 #ifdef __has_include
   #if __has_include("miniz.h")
     #include "miniz.h"
@@ -621,7 +628,7 @@ typedef unsigned long uLongf;
 #endif
 
 /* Include miniz.c directly - it's self-contained and provides zlib-compatible API */
-/* Miniz implementation files (miniz.c, miniz_tdef.c, miniz_tinfl.c) are compiled separately */
+/* Miniz implementation file (miniz.c) is compiled separately */
 /* They should NOT be included here via #include - the build system compiles them as separate translation units */
 /* This allows miniz to work as a true dependency-free embedded library without duplicate definitions */
 
@@ -687,7 +694,10 @@ static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
   /* Use zlib for decompression (gzip format uses zlib-wrapped deflate) */
   z_stream strm;
   memset(&strm, 0, sizeof(strm));
-  
+  strm.zalloc = Z_NULL;
+  strm.zfree = Z_NULL;
+  strm.opaque = Z_NULL;
+
   /* Use inflateInit2 with windowBits = -MAX_WBITS for raw deflate (gzip header already parsed) */
   if (inflateInit2(&strm, -MAX_WBITS) != Z_OK)
     return 0;
@@ -695,8 +705,11 @@ static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
   strm.next_in = (Bytef *)deflate_data;
   strm.avail_in = (uInt)deflate_size;
   
-  /* Allocate output buffer (start with 4x estimate) */
-  uLongf dest_len = deflate_size * 4;
+  /* Allocate output buffer (start with larger estimate to avoid frequent reallocs) */
+  /* For gzip, the uncompressed size is in the footer, but we don't know it yet */
+  /* Use a reasonable starting size and expand as needed */
+  uLongf dest_len = deflate_size * 8; /* Larger initial buffer */
+  if (dest_len < 4096) dest_len = 4096; /* Minimum 4KB */
   void *dest = malloc(dest_len);
   if (!dest) {
     inflateEnd(&strm);
@@ -705,44 +718,57 @@ static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
   
   strm.next_out = (Bytef *)dest;
   strm.avail_out = dest_len;
-  
+
   int ret;
+  int flush = Z_FINISH; /* Use Z_FINISH since we have all input */
+  
   do {
-    ret = inflate(&strm, Z_FINISH);
+    ret = inflate(&strm, flush);
+    
     if (ret == Z_STREAM_END)
       break;
-    if (ret != Z_OK && ret != Z_BUF_ERROR) {
-      free(dest);
-      inflateEnd(&strm);
-      return 0;
-    }
-    /* If buffer is full, expand it */
-    if (strm.avail_out == 0) {
-      uLongf old_len = dest_len;
-      dest_len *= 2;
-      void *new_dest = realloc(dest, dest_len);
-      if (!new_dest) {
+      
+    if (ret == Z_OK || ret == Z_BUF_ERROR) {
+      /* Need more output space */
+      if (strm.avail_out == 0) {
+        uLongf old_total = strm.total_out;
+        dest_len *= 2;
+        void *new_dest = realloc(dest, dest_len);
+        if (!new_dest) {
+          free(dest);
+          inflateEnd(&strm);
+          return 0;
+        }
+        dest = new_dest;
+        strm.next_out = (Bytef *)dest + old_total;
+        strm.avail_out = dest_len - old_total;
+      } else if (ret == Z_BUF_ERROR && strm.avail_in == 0) {
+        /* Z_BUF_ERROR with avail_out > 0 and avail_in == 0 - input exhausted but stream not ended */
+        /* This shouldn't happen with Z_FINISH, but handle it */
         free(dest);
         inflateEnd(&strm);
         return 0;
       }
-      dest = new_dest;
-      strm.next_out = (Bytef *)dest + old_len;
-      strm.avail_out = dest_len - old_len;
+    } else {
+      /* Other error (Z_DATA_ERROR, Z_STREAM_ERROR, etc.) */
+      free(dest);
+      inflateEnd(&strm);
+      return 0;
     }
   } while (ret != Z_STREAM_END);
   
   dest_len = strm.total_out;
-  
-  /* Resize to actual size */
-  if (dest_len > 0) {
-    void *new_dest = realloc(dest, dest_len);
-    if (new_dest)
-      dest = new_dest;
-  }
-  
   inflateEnd(&strm);
-  
+
+  if (dest_len == 0) {
+    free(dest);
+    return 0; /* No data decompressed */
+  }
+
+  void *new_dest = realloc(dest, dest_len);
+  if (new_dest)
+    dest = new_dest;
+
   *decompressed = dest;
   *decompressed_size = dest_len;
   return 1;

@@ -1,13 +1,13 @@
 #define STB_UNPACK_IMPLEMENTATION
-#include "../stb_unpack.h"
+#include "../../stb_unpack.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
 int main(void) {
-  FILE *f = fopen("archive.tar", "rb");
+  FILE *f = fopen("output/archive.tar", "rb");
   if (!f) {
-    fprintf(stderr, "Error: Could not open archive.tar\n");
+    fprintf(stderr, "Error: Could not open output/archive.tar\n");
     return 1;
   }
 
@@ -16,7 +16,7 @@ int main(void) {
   fseek(f, 0, SEEK_SET);
 
   if (sz == 0) {
-    fprintf(stderr, "Error: archive.tar is empty\n");
+    fprintf(stderr, "Error: output/archive.tar is empty\n");
     fclose(f);
     return 1;
   }
@@ -39,13 +39,13 @@ int main(void) {
 
   printf("Archive size: %zu bytes\n", sz);
   
-  if (!stbup_tar_extract_stream(buf, sz, "out")) {
+  if (!stbup_tar_extract_stream(buf, sz, "output/out")) {
     fprintf(stderr, "Error: Failed to extract archive\n");
     free(buf);
     return 1;
   }
 
-  printf("Successfully extracted archive to 'out' directory\n");
+  printf("Successfully extracted archive to 'output/out' directory\n");
   free(buf);
   return 0;
 }

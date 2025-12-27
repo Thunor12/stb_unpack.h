@@ -1,0 +1,5 @@
+Line 1
+Line 2 with special chars: !@#$%^&*()
+Line 3 with unicode: café résumé
+Line 4 with tabs:	tab	here
+Line 5: End

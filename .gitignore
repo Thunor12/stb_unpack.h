@@ -54,17 +54,8 @@ dkms.conf
 # debug information files
 *.dwo
 
-# Test outputs
-test/*.tar
-test/*.tar.gz
-test/test
-test/test_create
-test/test_targz
-test/test.exe
-test/out/
-test/tar_extracted/
-test/targz_out/
-test/tar_extracted_targz/
-test/our_*.tar
-test/tar_*.tar
-test/test_reference.tar
+# Test executables (all in test/build/)
+test/build/
+
+# Test outputs (all generated files go to test/output/)
+test/output/
