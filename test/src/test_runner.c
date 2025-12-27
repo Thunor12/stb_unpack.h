@@ -700,6 +700,14 @@ typedef struct {
  * All tests are registered here. The main function iterates through
  * this array and runs each test.
  */
+/**
+ * Security test runner - runs security regression tests
+ */
+static int test_security(void) {
+    char *args[] = {};
+    return run_test_exe(exe_path("build/test_security"), "Security Tests", 0, args);
+}
+
 static const TestCase tests[] = {
     {"TAR Extraction Test", test_tar_extract, false},
     {"TAR Creation Test", test_tar_create, false},
@@ -710,6 +718,7 @@ static const TestCase tests[] = {
     {".zip Test", test_zip_basic, true},
     {".zip Compatibility Test", test_zip_compat, true},
     {".zip Comprehensive Test", test_zip_comprehensive, true},
+    {"Security Tests", test_security, true},
 };
 
 /**

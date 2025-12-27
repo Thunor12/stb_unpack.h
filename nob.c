@@ -273,6 +273,8 @@ int main(int argc, char **argv)
         return 1;
     if (!compile_test_exe("test_runner", TEST_SRC_DIR "test_runner.c"))
         return 1;
+    if (!compile_test_exe("test_security", TEST_SRC_DIR "test_security.c"))
+        return 1;
 
     // Build example program (if requested or if no args provided)
     if (do_example || argc == 0)

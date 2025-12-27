@@ -112,6 +112,135 @@ static void stbup_dirname(char *path)
         path[0] = 0;
 }
 
+/**
+ * Normalize and validate a path to prevent path traversal attacks.
+ * 
+ * This function:
+ * - Rejects absolute paths (starting with / or drive letters on Windows)
+ * - Collapses .. components
+ * - Removes . components
+ * - Normalizes path separators
+ * - Ensures the final path stays within the output directory
+ * 
+ * @param entry_name The archive entry name (may contain .. or absolute paths)
+ * @param out_dir The output directory (must be absolute or relative to current dir)
+ * @param normalized_path Output buffer for normalized path (must be at least STBUP_PATH_MAX)
+ * @return 1 if path is valid and normalized, 0 if path is invalid (contains traversal)
+ */
+static int stbup_normalize_path(const char *entry_name, const char *out_dir, char *normalized_path)
+{
+    /* Reject empty entry names */
+    if (!entry_name || entry_name[0] == '\0')
+        return 0;
+    
+    /* Reject absolute paths (Unix: starts with /, Windows: starts with drive letter) */
+#ifdef _WIN32
+    if ((entry_name[0] >= 'A' && entry_name[0] <= 'Z' && entry_name[1] == ':') ||
+        (entry_name[0] >= 'a' && entry_name[0] <= 'z' && entry_name[1] == ':'))
+        return 0;
+#endif
+    if (entry_name[0] == '/' || entry_name[0] == '\\')
+        return 0;
+    
+    /* Build normalized path by processing components */
+    char components[STBUP_PATH_MAX][STBUP_PATH_MAX];
+    int num_components = 0;
+    const char *p = entry_name;
+    char component[STBUP_PATH_MAX];
+    size_t comp_len = 0;
+    
+    /* Parse path into components */
+    while (*p && num_components < STBUP_PATH_MAX)
+    {
+        if (*p == '/' || *p == '\\')
+        {
+            if (comp_len > 0)
+            {
+                component[comp_len] = '\0';
+                /* Skip . components */
+                if (strcmp(component, ".") != 0)
+                {
+                    /* Handle .. components */
+                    if (strcmp(component, "..") == 0)
+                    {
+                        /* Go up one level, but don't go above root */
+                        if (num_components > 0)
+                            num_components--;
+                    }
+                    else
+                    {
+                        /* Normal component - add it */
+                        if (comp_len < STBUP_PATH_MAX - 1)
+                        {
+                            strncpy(components[num_components], component, STBUP_PATH_MAX - 1);
+                            components[num_components][STBUP_PATH_MAX - 1] = '\0';
+                            num_components++;
+                        }
+                    }
+                }
+                comp_len = 0;
+            }
+        }
+        else
+        {
+            if (comp_len < STBUP_PATH_MAX - 1)
+            {
+                component[comp_len++] = *p;
+            }
+        }
+        p++;
+    }
+    
+    /* Handle final component */
+    if (comp_len > 0)
+    {
+        component[comp_len] = '\0';
+        if (strcmp(component, ".") != 0)
+        {
+            if (strcmp(component, "..") == 0)
+            {
+                if (num_components > 0)
+                    num_components--;
+            }
+            else
+            {
+                if (comp_len < STBUP_PATH_MAX - 1)
+                {
+                    strncpy(components[num_components], component, STBUP_PATH_MAX - 1);
+                    components[num_components][STBUP_PATH_MAX - 1] = '\0';
+                    num_components++;
+                }
+            }
+        }
+    }
+    
+    /* Reject if we ended up with an empty path (all .. components) */
+    if (num_components == 0)
+        return 0;
+    
+    /* Build final normalized path */
+    size_t len = strlen(out_dir);
+    if (len >= STBUP_PATH_MAX - 1)
+        return 0;
+    
+    strncpy(normalized_path, out_dir, STBUP_PATH_MAX - 1);
+    normalized_path[STBUP_PATH_MAX - 1] = '\0';
+    
+    /* Append components */
+    for (int i = 0; i < num_components; i++)
+    {
+        len = strlen(normalized_path);
+        if (len + strlen(components[i]) + 2 >= STBUP_PATH_MAX)
+            return 0;
+        
+        normalized_path[len] = '/';
+        strncpy(normalized_path + len + 1, components[i], STBUP_PATH_MAX - len - 2);
+        normalized_path[STBUP_PATH_MAX - 1] = '\0';
+    }
+    
+    return 1;
+}
+
 static int stbup_write_file(const char *path, const void *data, size_t size)
 {
     FILE *f = fopen(path, "wb");
@@ -267,18 +396,47 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
         {
             /* advance to next header even if no name */
             size_t skip = 512 + ((size + 511) & ~511);
+            if (p + skip > end)
+                break; /* Buffer overflow protection */
             p += skip;
             continue;
         }
 
-        char fullpath[STBUP_PATH_MAX];
+        /* Build entry path from prefix and name */
+        char entry_path[STBUP_PATH_MAX];
         if (prefix_len > 0)
         {
-            snprintf(fullpath, sizeof(fullpath), "%s/%s/%s", out_dir, prefix, name);
+            if (snprintf(entry_path, sizeof(entry_path), "%s/%s", prefix, name) >= (int)sizeof(entry_path))
+                goto next_entry; /* Path too long */
         }
         else
         {
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", out_dir, name);
+            if (snprintf(entry_path, sizeof(entry_path), "%s", name) >= (int)sizeof(entry_path))
+                goto next_entry; /* Path too long */
+        }
+        
+        /* Normalize path to prevent path traversal attacks */
+        char fullpath[STBUP_PATH_MAX];
+        if (!stbup_normalize_path(entry_path, out_dir, fullpath))
+            goto next_entry; /* Invalid path (path traversal attempt) */
+
+        /* Validate that we have enough data for the file content */
+        size_t data_size = (size_t)size;
+        size_t skip = 512 + ((size + 511) & ~511);
+        if (p + skip > end)
+        {
+            /* Truncated archive - don't read past buffer */
+            break;
+        }
+        
+        /* Additional check: ensure we can read the actual file data */
+        if (h->typeflag == '0' || h->typeflag == '\0')
+        {
+            if (p + 512 + data_size > end)
+            {
+                /* File data extends past buffer - skip this entry */
+                goto next_entry;
+            }
         }
 
         if (h->typeflag == '5')
@@ -294,13 +452,12 @@ static int stbup_tar_extract_stream(const void *tar_data, size_t tar_size,
             stbup_dirname(dirpath);
             if (dirpath[0] && !stbup_mkdirs(dirpath))
                 goto next_entry; /* skip if we can't create parent dir */
-            if (stbup_write_file(fullpath, p + 512, (size_t)size))
+            if (stbup_write_file(fullpath, p + 512, data_size))
                 files_extracted++;
         }
 
     next_entry:
         /* advance to next header */
-        size_t skip = 512 + ((size + 511) & ~511);
         p += skip;
     }
 
@@ -2249,6 +2406,37 @@ static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
         return 0; /* No data decompressed */
     }
 
+    /* Validate gzip footer: CRC32 and original size */
+    if (compressed_size < header_size + 8)
+    {
+        free(dest);
+        return 0; /* Not enough data for footer */
+    }
+    
+    const unsigned char *footer = p + compressed_size - 8;
+    uint32_t stored_crc32 = (uint32_t)footer[0] | ((uint32_t)footer[1] << 8) |
+                            ((uint32_t)footer[2] << 16) | ((uint32_t)footer[3] << 24);
+    uint32_t stored_size = (uint32_t)footer[4] | ((uint32_t)footer[5] << 8) |
+                           ((uint32_t)footer[6] << 16) | ((uint32_t)footer[7] << 24);
+    
+    /* Calculate CRC32 of decompressed data */
+    unsigned long calculated_crc32 = crc32(0L, Z_NULL, 0);
+    calculated_crc32 = crc32(calculated_crc32, (const Bytef *)dest, (uInt)dest_len);
+    
+    /* Validate CRC32 */
+    if ((uint32_t)calculated_crc32 != stored_crc32)
+    {
+        free(dest);
+        return 0; /* CRC32 mismatch - data corruption or tampering */
+    }
+    
+    /* Validate original size */
+    if (dest_len != (size_t)stored_size)
+    {
+        free(dest);
+        return 0; /* Size mismatch - data corruption or tampering */
+    }
+
     void *new_dest = realloc(dest, dest_len);
     if (new_dest)
         dest = new_dest;
@@ -2546,17 +2734,19 @@ static int stbup_zip_extract(const char *archive_path, const char *out_dir)
             break;
         }
 
+        /* Normalize and validate path to prevent path traversal attacks */
+        char normalized_path[STBUP_PATH_MAX];
+        if (!stbup_normalize_path(file_stat.m_filename, out_dir, normalized_path))
+        {
+            /* Invalid path (path traversal attempt) - skip this entry */
+            continue;
+        }
+
         /* Skip directories */
         if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
         {
             /* Create directory */
-            char dir_path[STBUP_PATH_MAX];
-            if (snprintf(dir_path, sizeof(dir_path), "%s/%s", out_dir, file_stat.m_filename) >= (int)sizeof(dir_path))
-            {
-                success = 0;
-                break;
-            }
-            stbup_mkdirs(dir_path);
+            stbup_mkdirs(normalized_path);
             continue;
         }
 
@@ -2569,14 +2759,10 @@ static int stbup_zip_extract(const char *archive_path, const char *out_dir)
             break;
         }
 
-        /* Write file to disk */
+        /* Use normalized path for file writing */
         char file_path[STBUP_PATH_MAX];
-        if (snprintf(file_path, sizeof(file_path), "%s/%s", out_dir, file_stat.m_filename) >= (int)sizeof(file_path))
-        {
-            mz_free(p);
-            success = 0;
-            break;
-        }
+        strncpy(file_path, normalized_path, sizeof(file_path) - 1);
+        file_path[sizeof(file_path) - 1] = '\0';
 
         /* Create directory if needed */
         char *last_slash = strrchr(file_path, '/');
