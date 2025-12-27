@@ -46,8 +46,8 @@ echo ""
 run_test "TAR Compatibility Test" "./test_tar_compat.sh"
 echo ""
 
-# Check if zlib is available for .tar.gz tests
-if command -v gcc &> /dev/null && gcc -lz -x c - -o /dev/null 2>/dev/null <<< "int main(){return 0;}"; then
+# Check if miniz is available for .tar.gz tests
+if [ -f "../miniz.c" ] && [ -f "../miniz.h" ]; then
     run_test ".tar.gz Test" "./test_targz.sh"
     echo ""
     
@@ -55,7 +55,9 @@ if command -v gcc &> /dev/null && gcc -lz -x c - -o /dev/null 2>/dev/null <<< "i
     echo ""
 else
     echo "----------------------------------------"
-    echo "Skipping .tar.gz tests (zlib not available)"
+    echo "Skipping .tar.gz tests (miniz.c and miniz.h not found)"
+    echo "Please download miniz from https://github.com/richgel999/miniz"
+    echo "and place miniz.c and miniz.h in the repository root"
     echo "----------------------------------------"
     echo ""
 fi

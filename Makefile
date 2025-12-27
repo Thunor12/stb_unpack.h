@@ -22,17 +22,17 @@ all: build
 # Build test programs
 build: $(TEST_DIR)/test $(TEST_DIR)/test_create $(TEST_DIR)/test_targz
 
-$(TEST_DIR)/test: $(TEST_DIR)/test.c stb_unpack.h
+$(TEST_DIR)/test: $(TEST_DIR)/test.c stb_unpack.h miniz.c miniz_tdef.c miniz_tinfl.c
 	@echo "Building extraction test..."
-	@$(CC) $(TEST_DIR)/test.c -o $(TEST_DIR)/test $(CFLAGS) -DSTBUP_NO_ZLIB -I.
+	@$(CC) $(TEST_DIR)/test.c miniz.c miniz_tdef.c miniz_tinfl.c -o $(TEST_DIR)/test $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
-$(TEST_DIR)/test_create: $(TEST_DIR)/test_create.c stb_unpack.h
+$(TEST_DIR)/test_create: $(TEST_DIR)/test_create.c stb_unpack.h miniz.c miniz_tdef.c miniz_tinfl.c
 	@echo "Building creation test..."
-	@$(CC) $(TEST_DIR)/test_create.c -o $(TEST_DIR)/test_create $(CFLAGS) -DSTBUP_NO_ZLIB -I.
+	@$(CC) $(TEST_DIR)/test_create.c miniz.c miniz_tdef.c miniz_tinfl.c -o $(TEST_DIR)/test_create $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
-$(TEST_DIR)/test_targz: $(TEST_DIR)/test_targz.c stb_unpack.h
+$(TEST_DIR)/test_targz: $(TEST_DIR)/test_targz.c stb_unpack.h miniz.c miniz_tdef.c miniz_tinfl.c
 	@echo "Building .tar.gz test..."
-	@$(CC) $(TEST_DIR)/test_targz.c -o $(TEST_DIR)/test_targz $(CFLAGS) -I. -lz
+	@$(CC) $(TEST_DIR)/test_targz.c miniz.c miniz_tdef.c miniz_tinfl.c -o $(TEST_DIR)/test_targz $(CFLAGS) -I. -DMINIZ_IMPLEMENTATION
 
 # Run tests (builds first if needed)
 test: build

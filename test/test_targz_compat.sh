@@ -5,16 +5,16 @@ set -e  # Exit on error
 
 echo "=== Building .tar.gz test program ==="
 if command -v gcc &> /dev/null; then
-    gcc test_targz.c -o test_targz -std=c99 -Wall -I.. -lz 2>&1 | grep -v "warning:.*defined but not used" || true
+    gcc test_targz.c ../miniz.c ../miniz_tdef.c ../miniz_tinfl.c -o test_targz -std=c99 -Wall -I.. -DMINIZ_IMPLEMENTATION 2>&1 | grep -v "warning:.*defined but not used" || true
 elif command -v clang &> /dev/null; then
-    clang test_targz.c -o test_targz -std=c99 -Wall -I.. -lz 2>&1 | grep -v "warning:.*defined but not used" || true
+    clang test_targz.c ../miniz.c ../miniz_tdef.c ../miniz_tinfl.c -o test_targz -std=c99 -Wall -I.. -DMINIZ_IMPLEMENTATION 2>&1 | grep -v "warning:.*defined but not used" || true
 else
     echo "Error: No C compiler found"
     exit 1
 fi
 
 if [ ! -f test_targz ]; then
-    echo "✗ Build failed! Make sure zlib is installed (libz-dev on Debian/Ubuntu)"
+    echo "✗ Build failed! Make sure miniz.c and miniz.h are in the repository root"
     exit 1
 fi
 

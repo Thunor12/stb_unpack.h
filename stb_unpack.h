@@ -521,31 +521,117 @@ static int stbup_tar_create_file(const char *archive_path, const char *file_path
 #endif
 
 #if STBUP_USE_MINIZ
-/* Use zlib for deflate/inflate - TODO: embed miniz for true dependency-free */
-#ifdef STBUP_NO_ZLIB
-#define STBUP_HAS_ZLIB 0
-#else
-#ifdef _WIN32
-#pragma comment(lib, "zlib")
+/* Embedded miniz for deflate/inflate - true dependency-free */
+#define STBUP_HAS_MINIZ 1
+
+/* Miniz configuration - disable features we don't need */
+#ifndef MINIZ_NO_STDIO
+#define MINIZ_NO_STDIO
 #endif
+#ifndef MINIZ_NO_ARCHIVE_APIS
+#define MINIZ_NO_ARCHIVE_APIS
+#endif
+#ifndef MINIZ_NO_TIME
+#define MINIZ_NO_TIME
+#endif
+
+/* Include miniz.h for type definitions (z_stream, etc.) */
+/* The implementation (miniz.c, miniz_tdef.c, miniz_tinfl.c) is compiled separately */
 #ifdef __has_include
-  #if __has_include(<zlib.h>)
-    #include <zlib.h>
-    #define STBUP_HAS_ZLIB 1
-  #else
-    #define STBUP_HAS_ZLIB 0
+  #if __has_include("miniz.h")
+    #include "miniz.h"
+  #elif __has_include("../miniz.h")
+    #include "../miniz.h"
   #endif
 #else
-  /* Try to include zlib - if not available, gzip functions will fail gracefully */
-  #ifdef STBUP_FORCE_ZLIB
-    #include <zlib.h>
-    #define STBUP_HAS_ZLIB 1
-  #else
-    #define STBUP_HAS_ZLIB 0
-  #endif
+  #include "miniz.h"
 #endif
+
+/* Type mappings for zlib compatibility */
+typedef unsigned char Bytef;
+typedef unsigned int uInt;
+typedef unsigned long uLong;
+typedef unsigned long uLongf;
+
+/* Zlib-compatible constants */
+#ifndef Z_NULL
+#define Z_NULL NULL
 #endif
+
+#ifndef Z_OK
+#define Z_OK 0
 #endif
+
+#ifndef Z_STREAM_END
+#define Z_STREAM_END 1
+#endif
+
+#ifndef Z_NEED_DICT
+#define Z_NEED_DICT 2
+#endif
+
+#ifndef Z_ERRNO
+#define Z_ERRNO (-1)
+#endif
+
+#ifndef Z_STREAM_ERROR
+#define Z_STREAM_ERROR (-2)
+#endif
+
+#ifndef Z_DATA_ERROR
+#define Z_DATA_ERROR (-3)
+#endif
+
+#ifndef Z_MEM_ERROR
+#define Z_MEM_ERROR (-4)
+#endif
+
+#ifndef Z_BUF_ERROR
+#define Z_BUF_ERROR (-5)
+#endif
+
+#ifndef Z_VERSION_ERROR
+#define Z_VERSION_ERROR (-6)
+#endif
+
+#ifndef Z_NO_FLUSH
+#define Z_NO_FLUSH 0
+#define Z_PARTIAL_FLUSH 1
+#define Z_SYNC_FLUSH 2
+#define Z_FULL_FLUSH 3
+#define Z_FINISH 4
+#define Z_BLOCK 5
+#define Z_TREES 6
+#endif
+
+#ifndef Z_DEFLATED
+#define Z_DEFLATED 8
+#endif
+
+#ifndef Z_DEFAULT_COMPRESSION
+#define Z_DEFAULT_COMPRESSION (-1)
+#endif
+
+#ifndef Z_DEFAULT_STRATEGY
+#define Z_DEFAULT_STRATEGY 0
+#endif
+
+#ifndef MAX_WBITS
+#define MAX_WBITS 15
+#endif
+
+/* Include miniz.c directly - it's self-contained and provides zlib-compatible API */
+/* Miniz implementation files (miniz.c, miniz_tdef.c, miniz_tinfl.c) are compiled separately */
+/* They should NOT be included here via #include - the build system compiles them as separate translation units */
+/* This allows miniz to work as a true dependency-free embedded library without duplicate definitions */
+
+/* z_stream is defined by miniz.c - forward declare for non-implementation case */
+#ifndef z_stream
+struct z_stream;
+typedef struct z_stream z_stream;
+#endif
+
+#endif /* STBUP_USE_MINIZ */
 
 /* Gzip header structure */
 typedef struct {
@@ -558,7 +644,7 @@ typedef struct {
   unsigned char os;
 } stbup_gzip_header;
 
-#if STBUP_HAS_ZLIB
+#if STBUP_HAS_MINIZ
 /* Decompress gzip data */
 static int stbup_gzip_decompress(const void *compressed, size_t compressed_size,
                                   void **decompressed, size_t *decompressed_size) {
@@ -758,7 +844,7 @@ static int stbup_gzip_compress(const void *data, size_t data_size,
 }
 #endif
 
-#if STBUP_HAS_ZLIB
+#if STBUP_HAS_MINIZ
 /* Extract .tar.gz archive */
 static int stbup_targz_extract(const char *archive_path, const char *out_dir) {
   void *compressed_data = NULL;
